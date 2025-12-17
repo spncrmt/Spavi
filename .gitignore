@@ -40,3 +40,10 @@ next-env.d.ts
 
 # accidental home directory
 ~
+
+# Tesseract language data (auto-downloaded)
+*.traineddata
+
+# Test files
+fake_fax_note.jpg
+fake_fax_note.pdf
