@@ -1,18 +1,20 @@
 import { useState, useRef } from 'react';
 import Head from 'next/head';
 import SectionCard from '@/components/SectionCard';
-import { SmartSections } from '@/lib/prompt';
+import { SmartSections, FaxMetadata } from '@/lib/prompt';
 
-type SectionType = 'HPI' | 'PhysicalExam' | 'Assessment' | 'Plan';
+type SectionType = 'ChiefComplaint' | 'HPI' | 'ReviewOfSystems' | 'PhysicalExam' | 'Assessment' | 'Plan' | 'Disposition';
 
 export default function Home() {
   const [inputText, setInputText] = useState('');
   const [sections, setSections] = useState<SmartSections | null>(null);
+  const [metadata, setMetadata] = useState<FaxMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [showTextArea, setShowTextArea] = useState(false);
+  const [metadataCopied, setMetadataCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [selectedSections, setSelectedSections] = useState<SectionType[]>([
@@ -36,6 +38,7 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setSections(null);
+    setMetadata(null);
 
     try {
       const response = await fetch('/api/generate', {
@@ -56,6 +59,9 @@ export default function Home() {
       }
 
       setSections(data.sections);
+      if (data.metadata) {
+        setMetadata(data.metadata);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -66,8 +72,31 @@ export default function Home() {
   const handleClear = () => {
     setInputText('');
     setSections(null);
+    setMetadata(null);
     setError(null);
     setShowTextArea(false);
+  };
+
+  const handleCopyMetadata = async () => {
+    if (!metadata) return;
+    
+    const lines: string[] = [];
+    if (metadata.patientName) lines.push(`Patient: ${metadata.patientName}`);
+    if (metadata.dateOfBirth) lines.push(`DOB: ${metadata.dateOfBirth}`);
+    if (metadata.mrn) lines.push(`MRN: ${metadata.mrn}`);
+    if (metadata.referringProvider) lines.push(`Referring Provider: ${metadata.referringProvider}`);
+    if (metadata.referringPractice) lines.push(`Practice: ${metadata.referringPractice}`);
+    if (metadata.dateOfService) lines.push(`Date of Service: ${metadata.dateOfService}`);
+    if (metadata.faxDate) lines.push(`Fax Date: ${metadata.faxDate}`);
+    if (metadata.phoneNumber) lines.push(`Phone: ${metadata.phoneNumber}`);
+    
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setMetadataCopied(true);
+      setTimeout(() => setMetadataCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy metadata:', err);
+    }
   };
 
   const toggleSection = (section: SectionType) => {
@@ -374,10 +403,13 @@ export default function Home() {
                   </label>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
+                      { key: 'ChiefComplaint', label: 'Chief Complaint' },
                       { key: 'HPI', label: 'HPI (History of Present Illness)' },
+                      { key: 'ReviewOfSystems', label: 'Review of Systems' },
                       { key: 'PhysicalExam', label: 'Physical Exam' },
                       { key: 'Assessment', label: 'Assessment' },
                       { key: 'Plan', label: 'Plan' },
+                      { key: 'Disposition', label: 'Disposition/Follow-up' },
                     ].map(({ key, label }) => (
                       <label
                         key={key}
@@ -454,6 +486,77 @@ export default function Home() {
             </div>
           )}
 
+          {/* Fax Metadata Section */}
+          {metadata && Object.keys(metadata).length > 0 && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-lg font-semibold text-blue-900 flex items-center gap-2">
+                  <span>📋</span> Fax Information
+                </h2>
+                <button
+                  onClick={handleCopyMetadata}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    metadataCopied
+                      ? 'bg-green-100 text-green-700 border border-green-300'
+                      : 'bg-white text-blue-600 border border-blue-300 hover:bg-blue-100'
+                  }`}
+                >
+                  {metadataCopied ? '✓ Copied!' : '📋 Copy All'}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3">
+                {metadata.patientName && (
+                  <div>
+                    <span className="text-sm text-blue-600 font-medium">Patient:</span>
+                    <span className="ml-2 text-gray-900">{metadata.patientName}</span>
+                  </div>
+                )}
+                {metadata.dateOfBirth && (
+                  <div>
+                    <span className="text-sm text-blue-600 font-medium">DOB:</span>
+                    <span className="ml-2 text-gray-900">{metadata.dateOfBirth}</span>
+                  </div>
+                )}
+                {metadata.mrn && (
+                  <div>
+                    <span className="text-sm text-blue-600 font-medium">MRN:</span>
+                    <span className="ml-2 text-gray-900">{metadata.mrn}</span>
+                  </div>
+                )}
+                {metadata.referringProvider && (
+                  <div>
+                    <span className="text-sm text-blue-600 font-medium">Referring Provider:</span>
+                    <span className="ml-2 text-gray-900">{metadata.referringProvider}</span>
+                  </div>
+                )}
+                {metadata.referringPractice && (
+                  <div>
+                    <span className="text-sm text-blue-600 font-medium">Practice:</span>
+                    <span className="ml-2 text-gray-900">{metadata.referringPractice}</span>
+                  </div>
+                )}
+                {metadata.dateOfService && (
+                  <div>
+                    <span className="text-sm text-blue-600 font-medium">Date of Service:</span>
+                    <span className="ml-2 text-gray-900">{metadata.dateOfService}</span>
+                  </div>
+                )}
+                {metadata.faxDate && (
+                  <div>
+                    <span className="text-sm text-blue-600 font-medium">Fax Date:</span>
+                    <span className="ml-2 text-gray-900">{metadata.faxDate}</span>
+                  </div>
+                )}
+                {metadata.phoneNumber && (
+                  <div>
+                    <span className="text-sm text-blue-600 font-medium">Phone:</span>
+                    <span className="ml-2 text-gray-900">{metadata.phoneNumber}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Results Section */}
           {sections && (
             <div className="space-y-6">
@@ -462,28 +565,60 @@ export default function Home() {
               </h2>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {sections.ChiefComplaint && (
+                  <SectionCard
+                    title="Chief Complaint"
+                    content={sections.ChiefComplaint}
+                    sources={sections.ChiefComplaint_sources}
+                    originalText={inputText}
+                  />
+                )}
                 {sections.HPI && (
                   <SectionCard
                     title="HPI (History of Present Illness)"
                     content={sections.HPI}
+                    sources={sections.HPI_sources}
+                    originalText={inputText}
+                  />
+                )}
+                {sections.ReviewOfSystems && (
+                  <SectionCard
+                    title="Review of Systems"
+                    content={sections.ReviewOfSystems}
+                    sources={sections.ReviewOfSystems_sources}
+                    originalText={inputText}
                   />
                 )}
                 {sections.PhysicalExam && (
                   <SectionCard
                     title="Physical Exam"
                     content={sections.PhysicalExam}
+                    sources={sections.PhysicalExam_sources}
+                    originalText={inputText}
                   />
                 )}
                 {sections.Assessment && (
                   <SectionCard
                     title="Assessment"
                     content={sections.Assessment}
+                    sources={sections.Assessment_sources}
+                    originalText={inputText}
                   />
                 )}
                 {sections.Plan && (
                   <SectionCard
                     title="Plan"
                     content={sections.Plan}
+                    sources={sections.Plan_sources}
+                    originalText={inputText}
+                  />
+                )}
+                {sections.Disposition && (
+                  <SectionCard
+                    title="Disposition/Follow-up"
+                    content={sections.Disposition}
+                    sources={sections.Disposition_sources}
+                    originalText={inputText}
                   />
                 )}
               </div>
