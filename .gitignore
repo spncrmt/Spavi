@@ -47,3 +47,12 @@ next-env.d.ts
 # Test files
 fake_fax_note.jpg
 fake_fax_note.pdf
+
+/lib/generated/prisma
+
+# SQLite database
+*.db
+*.db-journal
+
+# Uploaded fax files
+/uploads

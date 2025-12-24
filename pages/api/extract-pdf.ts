@@ -99,6 +99,7 @@ async function extractTextWithOCR(filepath: string): Promise<string> {
     await page.render({
       canvasContext: context as any,
       viewport: viewport,
+      canvas: canvas as any,
     }).promise;
 
     // Convert canvas to buffer

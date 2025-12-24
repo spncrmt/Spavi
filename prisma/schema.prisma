@@ -1,0 +1,26 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Fax {
+  id           Int       @id @default(autoincrement())
+  externalId   String?   // ID from external fax service
+  fromNumber   String    // Phone number that sent the fax
+  receivedAt   DateTime  // When the fax was received
+  status       String    @default("pending") // pending, processing, completed, failed
+  rawText      String?   // Extracted OCR text
+  metadata     String?   // JSON string: patient name, DOB, MRN, etc.
+  sections     String?   // JSON string: generated SmartSections
+  pdfPath      String?   // Path to stored PDF file
+  errorMessage String?   // Error message if processing failed
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}

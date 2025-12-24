@@ -200,14 +200,14 @@ function validateAndNormalizeSections(rawResponse: any, requestedSections: strin
     const value = rawResponse[key];
 
     if (typeof value === 'string') {
-      normalized[key as keyof SmartSections] = value;
+      (normalized as any)[key] = value;
     } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
       // Flatten nested object into formatted string
-      normalized[key as keyof SmartSections] = Object.entries(value)
+      (normalized as any)[key] = Object.entries(value)
         .map(([subKey, subValue]) => `${subKey}: ${subValue}`)
         .join('\n');
     } else {
-      normalized[key as keyof SmartSections] = String(value);
+      (normalized as any)[key] = String(value);
     }
 
     // Extract and VALIDATE sources - filter out any that don't exist in original text
