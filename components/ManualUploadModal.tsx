@@ -1,12 +1,15 @@
 import { useState, useRef } from 'react';
 
+export type AIProvider = 'claude' | 'openai' | 'ollama';
+
 interface ManualUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  provider?: AIProvider;
 }
 
-export default function ManualUploadModal({ isOpen, onClose, onSuccess }: ManualUploadModalProps) {
+export default function ManualUploadModal({ isOpen, onClose, onSuccess, provider }: ManualUploadModalProps) {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +50,7 @@ export default function ManualUploadModal({ isOpen, onClose, onSuccess }: Manual
         body: JSON.stringify({
           text: inputText,
           fromNumber: 'Manual Upload',
+          provider: provider, // Pass selected AI provider
         }),
       });
 
@@ -271,9 +275,18 @@ export default function ManualUploadModal({ isOpen, onClose, onSuccess }: Manual
             )}
 
             {/* Info */}
-            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-1">
               <p className="text-xs text-gray-600">
                 📋 The fax will be processed automatically with all sections enabled (Chief Complaint, HPI, ROS, Physical Exam, Assessment, Plan, Disposition).
+              </p>
+              <p className="text-xs text-gray-600 flex items-center gap-1">
+                {provider === 'ollama' ? (
+                  <><span className="text-violet-600 font-medium">🔒 Local AI (Ollama)</span> - Document processed on-device, ~20s</>
+                ) : provider === 'openai' ? (
+                  <><span className="text-emerald-600 font-medium">☁️ Cloud AI (OpenAI)</span> - De-identified data sent to API, ~10s</>
+                ) : (
+                  <><span className="text-sky-600 font-medium">☁️ Cloud AI (Claude)</span> - De-identified data sent to API, ~10s</>
+                )}
               </p>
             </div>
           </div>

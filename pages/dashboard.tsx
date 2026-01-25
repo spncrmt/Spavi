@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import ManualUploadModal from '@/components/ManualUploadModal';
+import ProviderToggle, { AIProvider } from '@/components/ProviderToggle';
 
 interface FaxMetadata {
   patientName?: string;
@@ -123,6 +124,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('incoming');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [aiProvider, setAiProvider] = useState<AIProvider>('claude');
 
   const fetchFaxes = useCallback(async () => {
     try {
@@ -252,7 +254,13 @@ export default function Dashboard() {
                 Manage and review incoming fax documents
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-4">
+              {/* AI Provider Toggle */}
+              <ProviderToggle 
+                onProviderChange={setAiProvider}
+                className="mr-2"
+              />
+              
               <button
                 onClick={() => setShowUploadModal(true)}
                 className="px-4 py-2 bg-white text-gray-700 rounded-lg border border-gray-300 hover:bg-gray-50 transition-colors font-medium flex items-center gap-2"
@@ -512,6 +520,7 @@ export default function Dashboard() {
           setActiveTab('incoming');
           fetchFaxes();
         }}
+        provider={aiProvider}
       />
     </>
   );

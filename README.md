@@ -47,6 +47,11 @@ Convert clinical notes into Epic SmartSection format using AI. This MVP turns ra
 
    # OR for OpenAI
    OPENAI_API_KEY=sk-your-openai-key-here
+
+   # For local AI with Ollama (optional)
+   AI_PROVIDER=ollama          # Options: "claude", "openai", "ollama"
+   OLLAMA_BASE_URL=http://localhost:11434
+   OLLAMA_MODEL=llama3.1
    ```
 
 4. **Run the development server**:
@@ -123,12 +128,59 @@ spavi/
 
 ## API Configuration
 
-The app supports both Claude and OpenAI APIs:
+The app supports multiple AI providers:
 
-- **Claude (recommended)**: Uses `claude-3-5-sonnet-20241022` model
-- **OpenAI**: Uses `gpt-4o-mini` model
+- **Claude (recommended)**: Uses `claude-3-5-sonnet-20241022` model - fastest, best quality
+- **OpenAI**: Uses `gpt-4o-mini` model - fast, reliable
+- **Ollama (local)**: Uses local LLMs (default: `llama3.1`) - private, on-device
 
-The API endpoint (`/api/generate`) will prefer Claude if both keys are present.
+The API endpoint (`/api/generate`) will prefer Claude if both keys are present, unless overridden.
+
+### Local AI with Ollama
+
+For complete privacy, you can run AI processing entirely on your device using Ollama:
+
+#### Installation
+
+```bash
+# Install Ollama (macOS)
+brew install ollama
+
+# Or download from https://ollama.ai
+
+# Pull the recommended model
+ollama pull llama3.1
+
+# Start Ollama server (run in background)
+ollama serve
+```
+
+#### Configuration
+
+Add to your `.env.local`:
+
+```bash
+# Set Ollama as default provider (optional)
+AI_PROVIDER=ollama
+
+# Ollama settings (optional, these are defaults)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3.1
+```
+
+#### Using the UI Toggle
+
+You can also switch between providers using the toggle in the dashboard header:
+- Select "Ollama (Local)" to process documents entirely on-device
+- The app will show "🔒 Local Mode" when Ollama is active
+- Documents processed locally are NOT de-identified (no PHI leaves your machine)
+
+#### Performance Notes
+
+- **Cloud APIs (Claude/OpenAI)**: ~10 seconds per fax
+- **Ollama on M1/M2/M3/M4 Mac**: ~15-25 seconds per fax
+- Llama 3.1 8B produces good results, slightly less polished than Claude
+- For best local results, consider `llama3.1:70b` if you have sufficient RAM
 
 ## Security & Privacy
 

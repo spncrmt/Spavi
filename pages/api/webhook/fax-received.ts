@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
+import { deidentify, summarizeRedactions, reidentifySections, reidentifyMetadata } from '@/lib/deidentify';
 import fs from 'fs';
 import path from 'path';
 import PDFParser from 'pdf2json';
@@ -130,20 +131,25 @@ async function processFax(faxId: number, pdfPath: string) {
       throw new Error('No text could be extracted from the PDF');
     }
 
-    // Update with raw text
+    // Store the ORIGINAL text in the database (for internal use)
     await prisma.fax.update({
       where: { id: faxId },
       data: { rawText: pdfText },
     });
 
-    // Call generate API to get sections and metadata
+    // DE-IDENTIFY the text before sending to external AI
+    console.log(`[Fax ${faxId}] De-identifying text before AI processing...`);
+    const { text: deidentifiedText, redactions } = await deidentify(pdfText);
+    console.log(`[Fax ${faxId}] De-identified: ${summarizeRedactions(redactions)}`);
+
+    // Call generate API with DE-IDENTIFIED text only
     const generateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        text: pdfText,
+        text: deidentifiedText,
         selectedSections: ['ChiefComplaint', 'HPI', 'ReviewOfSystems', 'PhysicalExam', 'Assessment', 'Plan', 'Disposition'],
       }),
     });
@@ -154,13 +160,18 @@ async function processFax(faxId: number, pdfPath: string) {
       throw new Error(generateData.error || 'Failed to generate sections');
     }
 
-    // Update fax record with results
+    // RE-IDENTIFY: Restore original PHI values in the AI output
+    console.log(`[Fax ${faxId}] Re-identifying AI output with original values...`);
+    const reidentifiedSections = reidentifySections(generateData.sections, redactions);
+    const reidentifiedMetadata = reidentifyMetadata(generateData.metadata, redactions);
+
+    // Update fax record with RE-IDENTIFIED results
     await prisma.fax.update({
       where: { id: faxId },
       data: {
         status: 'completed',
-        metadata: generateData.metadata ? JSON.stringify(generateData.metadata) : null,
-        sections: JSON.stringify(generateData.sections),
+        metadata: reidentifiedMetadata ? JSON.stringify(reidentifiedMetadata) : null,
+        sections: JSON.stringify(reidentifiedSections),
       },
     });
 

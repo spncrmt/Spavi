@@ -255,6 +255,98 @@ Include abbreviations exactly as written (e.g., "RRR", "PERRLA", "NAD", "BID", "
 }
 
 /**
+ * Simplified prompt for local models (Ollama/Llama)
+ * Local models work better with more concise, direct instructions
+ */
+export function getLocalModelPrompt(clinicalText: string, selectedSections?: string[]): string {
+  const sections = selectedSections || ['HPI', 'PhysicalExam', 'Assessment', 'Plan'];
+  const sectionKeys = sections.join('", "');
+  const sourceKeys = sections.map(s => `${s}_sources`).join('", "');
+
+  return `You are a medical scribe creating professional Epic SmartPhrase documentation.
+
+DOCUMENTATION STANDARDS:
+1. Use COMPLETE SENTENCES (not fragments)
+2. Spell out ALL medical abbreviations as full diagnoses
+3. NEVER add clinical reasoning not stated in input
+4. Include ALL details from input (vitals, meds, symptoms, findings)
+5. Mark unclear/illegible items with [illegible] or [partial]
+
+CRITICAL - HANDLING ILLEGIBLE/MISSING CONTENT:
+- If input says "???", "[illegible]", "[cannot read]", or similar → Output "Not documented - illegible in source"
+- If Assessment is missing/unreadable → DO NOT guess diagnoses, write "Not documented"
+- If Plan is missing/unreadable → DO NOT invent treatments, write "Not documented"
+- NEVER make up diagnoses like "myocardial infarction" or "appendicitis" unless EXPLICITLY stated
+- NEVER add referrals or tests that aren't in the input
+
+REQUIRED ABBREVIATION EXPANSIONS:
+Diagnoses (ALWAYS spell out fully):
+- DM2, DM → Type 2 diabetes mellitus
+- HTN → Hypertension  
+- HLD → Hyperlipidemia
+- CHF → Congestive heart failure
+- COPD → Chronic obstructive pulmonary disease
+- CAD → Coronary artery disease
+- CKD → Chronic kidney disease
+- AFib → Atrial fibrillation
+- GERD → Gastroesophageal reflux disease
+- OSA → Obstructive sleep apnea
+
+Clinical terms:
+- pt → patient, y/o → year-old, hx → history
+- c/o → complaining of, s/p → status post
+- n/v → nausea and vomiting, SOB → shortness of breath
+- abd → abdominal, bilat → bilateral
+- prn → as needed, BID → twice daily, TID → three times daily
+
+⚠️ CRITICAL FORMATTING FOR ASSESSMENT AND PLAN:
+Each numbered item MUST be on its own line using the newline character (\\n).
+DO NOT put all items on one line separated by spaces!
+
+EXAMPLE - Assessment (EACH ITEM ON NEW LINE):
+Input: "A: 1. DM2 - suboptimal control 2. HTN - at goal 3. HLD 4. obesity"
+❌ WRONG: "1. Type 2 diabetes mellitus. 2. Hypertension at goal." (all on one line!)
+✅ CORRECT: "1. Type 2 diabetes mellitus, suboptimally controlled.\\n2. Hypertension, well controlled at goal.\\n3. Hyperlipidemia, on statin therapy.\\n4. Obesity."
+
+EXAMPLE - Plan (EACH ITEM ON NEW LINE):
+Input: "P: increase metformin, nutrition referral, f/u 3mo"
+❌ WRONG: "1. Increase metformin. 2. Nutrition referral." (all on one line!)
+✅ CORRECT: "1. Increase metformin if tolerated.\\n2. Referral to nutrition.\\n3. Follow-up in 3 months."
+
+Remember: Insert \\n (literal backslash-n) between numbered items in JSON strings!
+
+EXAMPLE - Illegible content (DO NOT GUESS):
+Input: "A: ??? P: [cannot read]"
+WRONG: "Assessment: Chest pain, concerning for myocardial infarction. Plan: Referral to cardiology."
+CORRECT: "Assessment: Not documented - illegible in source. Plan: Not documented - illegible in source."
+NEVER invent diagnoses or treatments when the source is unreadable!
+
+EXAMPLE OUTPUT FORMAT:
+{
+  "metadata": {"patientName": "John Doe", "dateOfBirth": "01/15/1970", "mrn": "12345"},
+  "ChiefComplaint": "Abdominal pain for two days with nausea and vomiting.",
+  "ChiefComplaint_sources": ["abd pain x 2d", "n/v"],
+  "HPI": "58-year-old male presents with abdominal pain for two days. The pain started after eating and is associated with nausea and vomiting. He denies fever or chills. No blood in stool noted. Pain worsens with movement. Current medications include lisinopril 10mg and atorvastatin.",
+  "HPI_sources": ["58 y/o M", "abd pain x 2d", "started after eating", "n/v", "denies f/c", "no bld in stool", "worse w/ mov", "lisinop___ 10mg", "ator____"],
+  "Assessment": "1. Acute abdominal pain, rule out appendicitis versus gastroenteritis.\\n2. Hypertension, on lisinopril.",
+  "Assessment_sources": ["r/o appy vs gastroenter____", "lisinop___"],
+  "Plan": "1. CT scan of abdomen and pelvis with contrast.\\n2. Intravenous normal saline.\\n3. Nothing by mouth until further evaluation.\\n4. Surgical consultation as needed.",
+  "Plan_sources": ["CT abd/pelv w/ contr", "IV NS", "NPO", "surg c/s prn"]
+}
+
+REQUIRED JSON KEYS:
+- "metadata": object with patient info
+- "${sectionKeys}": STRING values (complete sentences, spelled-out diagnoses)
+- "${sourceKeys}": arrays of exact quotes from input
+
+---INPUT---
+${clinicalText}
+---END---
+
+Return professional documentation with full sentences and spelled-out diagnoses:`;
+}
+
+/**
  * Example of expected output format (for reference)
  */
 /**
