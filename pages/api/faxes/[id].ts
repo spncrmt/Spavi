@@ -7,6 +7,9 @@ interface FaxDetail {
   fromNumber: string;
   receivedAt: string;
   status: string;
+  documentType: string | null;
+  documentSubtype: string | null;
+  confidence: number | null;
   rawText: string | null;
   metadata: {
     patientName?: string;
@@ -61,6 +64,9 @@ export default async function handler(
         fromNumber: fax.fromNumber,
         receivedAt: fax.receivedAt.toISOString(),
         status: fax.status,
+        documentType: fax.documentType,
+        documentSubtype: fax.documentSubtype,
+        confidence: fax.confidence,
         rawText: fax.rawText,
         metadata: fax.metadata ? JSON.parse(fax.metadata) : null,
         sections: fax.sections ? JSON.parse(fax.sections) : null,
@@ -109,6 +115,9 @@ export default async function handler(
         fromNumber: fax.fromNumber,
         receivedAt: fax.receivedAt.toISOString(),
         status: fax.status,
+        documentType: fax.documentType,
+        documentSubtype: fax.documentSubtype,
+        confidence: fax.confidence,
         rawText: fax.rawText,
         metadata: fax.metadata ? JSON.parse(fax.metadata) : null,
         sections: fax.sections ? JSON.parse(fax.sections) : null,

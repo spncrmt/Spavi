@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
 import { deidentify, summarizeRedactions, reidentifySections, reidentifyMetadata } from '@/lib/deidentify';
+import { classifyDocument, getDocumentTypeLabel, DocumentType } from '@/lib/documentClassifier';
+import { getSectionsForDocumentType } from '@/lib/prompt';
 
 type AIProvider = 'claude' | 'openai' | 'ollama';
 
@@ -79,6 +81,26 @@ async function processFax(faxId: number, text: string, provider?: AIProvider) {
       data: { status: 'processing' },
     });
 
+    // CLASSIFY the document type
+    console.log(`[Manual Fax ${faxId}] Classifying document type...`);
+    const classification = classifyDocument(text);
+    console.log(`[Manual Fax ${faxId}] Document classified as: ${getDocumentTypeLabel(classification.type)} (confidence: ${(classification.confidence * 100).toFixed(0)}%)`);
+    console.log(`[Manual Fax ${faxId}] Detected keywords: ${classification.detectedKeywords.slice(0, 5).join(', ')}`);
+
+    // Get document-type-specific sections
+    const sectionsToExtract = getSectionsForDocumentType(classification.type);
+    console.log(`[Manual Fax ${faxId}] Will extract sections: ${sectionsToExtract.join(', ')}`);
+
+    // Update with classification
+    await prisma.fax.update({
+      where: { id: faxId },
+      data: {
+        documentType: classification.type,
+        documentSubtype: classification.subtype || null,
+        confidence: classification.confidence,
+      },
+    });
+
     // For local AI (Ollama), we can skip de-identification since data stays on device
     const useLocalAI = provider === 'ollama';
     
@@ -96,7 +118,7 @@ async function processFax(faxId: number, text: string, provider?: AIProvider) {
       console.log(`[Manual Fax ${faxId}] Using local AI (Ollama) - skipping de-identification`);
     }
 
-    // Call generate API
+    // Call generate API with document type
     const generateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/generate`, {
       method: 'POST',
       headers: {
@@ -104,8 +126,9 @@ async function processFax(faxId: number, text: string, provider?: AIProvider) {
       },
       body: JSON.stringify({
         text: textToProcess,
-        selectedSections: ['ChiefComplaint', 'HPI', 'ReviewOfSystems', 'PhysicalExam', 'Assessment', 'Plan', 'Disposition'],
-        provider: provider, // Pass provider to generate API
+        selectedSections: sectionsToExtract,
+        provider: provider,
+        documentType: classification.type,
       }),
     });
 
@@ -135,7 +158,7 @@ async function processFax(faxId: number, text: string, provider?: AIProvider) {
       },
     });
 
-    console.log(`[Manual Fax ${faxId}] Processing completed successfully (provider: ${provider || 'default'})`);
+    console.log(`[Manual Fax ${faxId}] Processing completed as ${getDocumentTypeLabel(classification.type)} (provider: ${provider || 'default'})`);
   } catch (error) {
     console.error(`[Manual Fax ${faxId}] Processing failed:`, error);
 

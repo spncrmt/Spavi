@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
 import { deidentify, summarizeRedactions, reidentifySections, reidentifyMetadata } from '@/lib/deidentify';
+import { classifyDocument, getDocumentTypeLabel, getSuggestedSections } from '@/lib/documentClassifier';
+import { getSectionsForDocumentType } from '@/lib/prompt';
 import fs from 'fs';
 import path from 'path';
 import PDFParser from 'pdf2json';
@@ -131,10 +133,25 @@ async function processFax(faxId: number, pdfPath: string) {
       throw new Error('No text could be extracted from the PDF');
     }
 
-    // Store the ORIGINAL text in the database (for internal use)
+    // CLASSIFY the document type
+    console.log(`[Fax ${faxId}] Classifying document type...`);
+    const classification = classifyDocument(pdfText);
+    console.log(`[Fax ${faxId}] Document classified as: ${getDocumentTypeLabel(classification.type)} (confidence: ${(classification.confidence * 100).toFixed(0)}%)`);
+    console.log(`[Fax ${faxId}] Detected keywords: ${classification.detectedKeywords.slice(0, 5).join(', ')}`);
+
+    // Get document-type-specific sections
+    const sectionsToExtract = getSectionsForDocumentType(classification.type);
+    console.log(`[Fax ${faxId}] Will extract sections: ${sectionsToExtract.join(', ')}`);
+
+    // Store the ORIGINAL text and classification in the database
     await prisma.fax.update({
       where: { id: faxId },
-      data: { rawText: pdfText },
+      data: { 
+        rawText: pdfText,
+        documentType: classification.type,
+        documentSubtype: classification.subtype || null,
+        confidence: classification.confidence,
+      },
     });
 
     // DE-IDENTIFY the text before sending to external AI
@@ -142,7 +159,7 @@ async function processFax(faxId: number, pdfPath: string) {
     const { text: deidentifiedText, redactions } = await deidentify(pdfText);
     console.log(`[Fax ${faxId}] De-identified: ${summarizeRedactions(redactions)}`);
 
-    // Call generate API with DE-IDENTIFIED text only
+    // Call generate API with DE-IDENTIFIED text and document-type-specific sections
     const generateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/generate`, {
       method: 'POST',
       headers: {
@@ -150,7 +167,8 @@ async function processFax(faxId: number, pdfPath: string) {
       },
       body: JSON.stringify({
         text: deidentifiedText,
-        selectedSections: ['ChiefComplaint', 'HPI', 'ReviewOfSystems', 'PhysicalExam', 'Assessment', 'Plan', 'Disposition'],
+        selectedSections: sectionsToExtract,
+        documentType: classification.type,
       }),
     });
 
@@ -175,7 +193,7 @@ async function processFax(faxId: number, pdfPath: string) {
       },
     });
 
-    console.log(`[Fax ${faxId}] Processing completed successfully`);
+    console.log(`[Fax ${faxId}] Processing completed successfully as ${getDocumentTypeLabel(classification.type)}`);
   } catch (error) {
     console.error(`[Fax ${faxId}] Processing failed:`, error);
 

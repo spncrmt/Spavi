@@ -5,6 +5,7 @@ interface SectionCardProps {
   content: string;
   sources?: string[];
   originalText?: string;
+  isEmpty?: boolean;
 }
 
 /**
@@ -106,7 +107,7 @@ function highlightSources(text: string, sources: string[]): React.ReactNode[] {
 /**
  * Renders a SmartSection card with title, content, copy-to-clipboard, and source viewing functionality
  */
-export default function SectionCard({ title, content, sources, originalText }: SectionCardProps) {
+export default function SectionCard({ title, content, sources, originalText, isEmpty }: SectionCardProps) {
   const [copied, setCopied] = useState(false);
   const [showSources, setShowSources] = useState(false);
 
@@ -128,43 +129,60 @@ export default function SectionCard({ title, content, sources, originalText }: S
   }, [originalText, sources]);
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow">
+    <div className={`bg-white border rounded-lg p-6 shadow-sm transition-shadow ${
+      isEmpty 
+        ? 'border-gray-100 bg-gray-50' 
+        : 'border-gray-200 hover:shadow-md'
+    }`}>
       <div className="flex justify-between items-start mb-3">
-        <h3 className="text-lg font-semibold text-gray-800">{title}</h3>
-        <div className="flex gap-2">
-          {hasSources && (
+        <h3 className={`text-lg font-semibold ${isEmpty ? 'text-gray-400' : 'text-gray-800'}`}>
+          {title}
+        </h3>
+        {!isEmpty && (
+          <div className="flex gap-2">
+            {hasSources && (
+              <button
+                onClick={() => setShowSources(!showSources)}
+                className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                  showSources
+                    ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
+                    : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+                }`}
+                aria-label={`${showSources ? 'Hide' : 'View'} sources for ${title}`}
+              >
+                {showSources ? '✕ Hide' : '🔍 Sources'}
+              </button>
+            )}
             <button
-              onClick={() => setShowSources(!showSources)}
+              onClick={handleCopy}
               className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                showSources
-                  ? 'bg-yellow-100 text-yellow-700 border border-yellow-300'
-                  : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
+                copied
+                  ? 'bg-green-100 text-green-700 border border-green-300'
+                  : 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100'
               }`}
-              aria-label={`${showSources ? 'Hide' : 'View'} sources for ${title}`}
+              aria-label={`Copy ${title} to clipboard`}
             >
-              {showSources ? '✕ Hide' : '🔍 Sources'}
+              {copied ? '✓ Copied!' : '📋 Copy'}
             </button>
-          )}
-          <button
-            onClick={handleCopy}
-            className={`px-3 py-1 text-sm rounded-md transition-colors ${
-              copied
-                ? 'bg-green-100 text-green-700 border border-green-300'
-                : 'bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100'
-            }`}
-            aria-label={`Copy ${title} to clipboard`}
-          >
-            {copied ? '✓ Copied!' : '📋 Copy'}
-          </button>
-        </div>
+          </div>
+        )}
       </div>
       
-      <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-        {content}
-      </div>
+      {isEmpty ? (
+        <div className="flex items-center gap-2 text-gray-400 italic">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+          </svg>
+          <span>No information found in document</span>
+        </div>
+      ) : (
+        <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
+          {content}
+        </div>
+      )}
 
       {/* Source Panel */}
-      {showSources && hasSources && (
+      {showSources && hasSources && !isEmpty && (
         <div className="mt-4 pt-4 border-t border-gray-200">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-sm font-medium text-gray-600">📄 Source Text</span>

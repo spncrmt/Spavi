@@ -11,16 +11,19 @@ datasource db {
 }
 
 model Fax {
-  id           Int       @id @default(autoincrement())
-  externalId   String?   // ID from external fax service
-  fromNumber   String    // Phone number that sent the fax
-  receivedAt   DateTime  // When the fax was received
-  status       String    @default("pending") // pending, processing, completed, failed
-  rawText      String?   // Extracted OCR text
-  metadata     String?   // JSON string: patient name, DOB, MRN, etc.
-  sections     String?   // JSON string: generated SmartSections
-  pdfPath      String?   // Path to stored PDF file
-  errorMessage String?   // Error message if processing failed
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id              Int       @id @default(autoincrement())
+  externalId      String?   // ID from external fax service
+  fromNumber      String    // Phone number that sent the fax
+  receivedAt      DateTime  // When the fax was received
+  status          String    @default("pending") // pending, processing, completed, failed
+  documentType    String?   // Auto-detected type: pathology, radiology, consultation, etc.
+  documentSubtype String?   // More specific classification (e.g., surgical_pathology, cytology)
+  confidence      Float?    // Classification confidence score (0-1)
+  rawText         String?   // Extracted OCR text
+  metadata        String?   // JSON string: patient name, DOB, MRN, etc.
+  sections        String?   // JSON string: generated SmartSections
+  pdfPath         String?   // Path to stored PDF file
+  errorMessage    String?   // Error message if processing failed
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }

@@ -21,10 +21,75 @@ interface FaxListItem {
   fromNumber: string;
   receivedAt: string;
   status: string;
+  documentType: string | null;
+  documentSubtype: string | null;
+  confidence: number | null;
   metadata: FaxMetadata | null;
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// Document type display helpers
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  pathology: 'Pathology Report',
+  radiology: 'Radiology Report',
+  consultation: 'Consultation',
+  lab_results: 'Lab Results',
+  toxicology: 'Toxicology Report',
+  discharge: 'Discharge Summary',
+  operative: 'Operative Report',
+  ed_note: 'ED Note',
+  progress_note: 'Progress Note',
+  h_and_p: 'History & Physical',
+  clinical_note: 'Clinical Note',
+};
+
+const DOCUMENT_TYPE_ICONS: Record<string, string> = {
+  pathology: '🔬',
+  radiology: '📷',
+  consultation: '👨‍⚕️',
+  lab_results: '🧪',
+  toxicology: '💊',
+  discharge: '🏥',
+  operative: '🔪',
+  ed_note: '🚑',
+  progress_note: '📝',
+  h_and_p: '📋',
+  clinical_note: '📄',
+};
+
+const DOCUMENT_TYPE_COLORS: Record<string, string> = {
+  pathology: 'bg-purple-100 text-purple-800 border-purple-300',
+  radiology: 'bg-blue-100 text-blue-800 border-blue-300',
+  consultation: 'bg-teal-100 text-teal-800 border-teal-300',
+  lab_results: 'bg-amber-100 text-amber-800 border-amber-300',
+  toxicology: 'bg-red-100 text-red-800 border-red-300',
+  discharge: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  operative: 'bg-rose-100 text-rose-800 border-rose-300',
+  ed_note: 'bg-orange-100 text-orange-800 border-orange-300',
+  progress_note: 'bg-cyan-100 text-cyan-800 border-cyan-300',
+  h_and_p: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  clinical_note: 'bg-gray-100 text-gray-800 border-gray-300',
+};
+
+function DocumentTypeBadge({ type, confidence }: { type: string | null; confidence: number | null }) {
+  if (!type) return null;
+  
+  const label = DOCUMENT_TYPE_LABELS[type] || type;
+  const icon = DOCUMENT_TYPE_ICONS[type] || '📄';
+  const colorClass = DOCUMENT_TYPE_COLORS[type] || 'bg-gray-100 text-gray-800 border-gray-300';
+  const confidencePercent = confidence ? Math.round(confidence * 100) : null;
+  
+  return (
+    <span className={`px-2 py-1 text-xs font-medium rounded-full border inline-flex items-center gap-1 ${colorClass}`}>
+      <span>{icon}</span>
+      <span>{label}</span>
+      {confidencePercent !== null && confidencePercent < 70 && (
+        <span className="text-xs opacity-70">({confidencePercent}%)</span>
+      )}
+    </span>
+  );
 }
 
 type TabType = 'incoming' | 'pending_review' | 'review_complete';
@@ -441,8 +506,11 @@ export default function Dashboard() {
                           </h3>
                         )}
 
-                        <div className="flex items-center gap-3 mb-3">
+                        <div className="flex items-center gap-3 mb-3 flex-wrap">
                           <StatusBadge status={fax.status} />
+                          {fax.documentType && (
+                            <DocumentTypeBadge type={fax.documentType} confidence={fax.confidence} />
+                          )}
                           <span className="text-sm text-gray-500">
                             {formatRelativeTime(fax.receivedAt)}
                           </span>

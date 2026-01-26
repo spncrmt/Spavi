@@ -21,6 +21,9 @@ interface FaxDetail {
   fromNumber: string;
   receivedAt: string;
   status: string;
+  documentType: string | null;
+  documentSubtype: string | null;
+  confidence: number | null;
   rawText: string | null;
   metadata: FaxMetadata | null;
   sections: Record<string, string> | null;
@@ -28,6 +31,69 @@ interface FaxDetail {
   errorMessage: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+// Document type display helpers
+const DOCUMENT_TYPE_LABELS: Record<string, string> = {
+  pathology: 'Pathology Report',
+  radiology: 'Radiology Report',
+  consultation: 'Consultation',
+  lab_results: 'Lab Results',
+  toxicology: 'Toxicology Report',
+  discharge: 'Discharge Summary',
+  operative: 'Operative Report',
+  ed_note: 'ED Note',
+  progress_note: 'Progress Note',
+  h_and_p: 'History & Physical',
+  clinical_note: 'Clinical Note',
+};
+
+const DOCUMENT_TYPE_ICONS: Record<string, string> = {
+  pathology: '🔬',
+  radiology: '📷',
+  consultation: '👨‍⚕️',
+  lab_results: '🧪',
+  toxicology: '💊',
+  discharge: '🏥',
+  operative: '🔪',
+  ed_note: '🚑',
+  progress_note: '📝',
+  h_and_p: '📋',
+  clinical_note: '📄',
+};
+
+const DOCUMENT_TYPE_COLORS: Record<string, string> = {
+  pathology: 'bg-purple-100 text-purple-800 border-purple-300',
+  radiology: 'bg-blue-100 text-blue-800 border-blue-300',
+  consultation: 'bg-teal-100 text-teal-800 border-teal-300',
+  lab_results: 'bg-amber-100 text-amber-800 border-amber-300',
+  toxicology: 'bg-red-100 text-red-800 border-red-300',
+  discharge: 'bg-indigo-100 text-indigo-800 border-indigo-300',
+  operative: 'bg-rose-100 text-rose-800 border-rose-300',
+  ed_note: 'bg-orange-100 text-orange-800 border-orange-300',
+  progress_note: 'bg-cyan-100 text-cyan-800 border-cyan-300',
+  h_and_p: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  clinical_note: 'bg-gray-100 text-gray-800 border-gray-300',
+};
+
+function DocumentTypeBadge({ type, subtype, confidence }: { type: string | null; subtype?: string | null; confidence: number | null }) {
+  if (!type) return null;
+  
+  const label = DOCUMENT_TYPE_LABELS[type] || type;
+  const icon = DOCUMENT_TYPE_ICONS[type] || '📄';
+  const colorClass = DOCUMENT_TYPE_COLORS[type] || 'bg-gray-100 text-gray-800 border-gray-300';
+  const confidencePercent = confidence ? Math.round(confidence * 100) : null;
+  
+  return (
+    <span className={`px-3 py-1 text-sm font-medium rounded-full border inline-flex items-center gap-1.5 ${colorClass}`}>
+      <span>{icon}</span>
+      <span>{label}</span>
+      {subtype && <span className="opacity-70">({subtype})</span>}
+      {confidencePercent !== null && (
+        <span className="text-xs opacity-70 ml-1">{confidencePercent}%</span>
+      )}
+    </span>
+  );
 }
 
 function getStatusBadgeClass(status: string): string {
@@ -55,7 +121,43 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+// Inline collapsible component for viewing original fax text (attached to Fax Info)
+function OriginalTextInline({ rawText }: { rawText: string }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="border-t border-gray-200">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full px-6 py-3 flex items-center justify-between text-left hover:bg-gray-50 transition-colors bg-gray-50/50"
+      >
+        <div className="flex items-center gap-2">
+          <span>📄</span>
+          <span className="text-sm font-medium text-gray-700">Original Document Text</span>
+          <span className="text-xs text-gray-400">({rawText.length} characters)</span>
+        </div>
+        <svg
+          className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isExpanded && (
+        <div className="px-6 pb-4 bg-gray-50/50">
+          <pre className="p-4 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 whitespace-pre-wrap font-mono overflow-x-auto max-h-72 overflow-y-auto">
+            {rawText}
+          </pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const sectionLabels: Record<string, string> = {
+  // Common sections
   ChiefComplaint: 'Chief Complaint',
   HPI: 'HPI (History of Present Illness)',
   ReviewOfSystems: 'Review of Systems',
@@ -63,6 +165,61 @@ const sectionLabels: Record<string, string> = {
   Assessment: 'Assessment',
   Plan: 'Plan',
   Disposition: 'Disposition/Follow-up',
+  // Pathology sections
+  SpecimenInfo: 'Specimen Information',
+  GrossDescription: 'Gross Description',
+  MicroscopicDescription: 'Microscopic Description',
+  Diagnosis: 'Diagnosis',
+  TNMStaging: 'TNM Staging',
+  SynopticReport: 'Synoptic Report',
+  // Radiology sections
+  ExamType: 'Exam Type',
+  ClinicalHistory: 'Clinical History',
+  Comparison: 'Comparison Studies',
+  Technique: 'Technique',
+  Findings: 'Findings',
+  Impression: 'Impression',
+  Recommendations: 'Recommendations',
+  // Consultation sections
+  ReasonForConsult: 'Reason for Consultation',
+  // Lab sections
+  TestName: 'Test Name',
+  Results: 'Results',
+  ReferenceRange: 'Reference Range',
+  Flags: 'Abnormal Flags',
+  // Operative sections
+  PreoperativeDiagnosis: 'Preoperative Diagnosis',
+  PostoperativeDiagnosis: 'Postoperative Diagnosis',
+  Procedure: 'Procedure',
+  Surgeon: 'Surgeon',
+  Anesthesia: 'Anesthesia',
+  EstimatedBloodLoss: 'Estimated Blood Loss',
+  Complications: 'Complications',
+  // Discharge sections
+  AdmissionDate: 'Admission Date',
+  DischargeDate: 'Discharge Date',
+  AdmittingDiagnosis: 'Admitting Diagnosis',
+  DischargeDiagnosis: 'Discharge Diagnosis',
+  HospitalCourse: 'Hospital Course',
+  DischargeMedications: 'Discharge Medications',
+  DischargeInstructions: 'Discharge Instructions',
+  FollowUp: 'Follow-up',
+  // H&P sections
+  PMH: 'Past Medical History',
+  PSH: 'Past Surgical History',
+  FamilyHistory: 'Family History',
+  SocialHistory: 'Social History',
+  Medications: 'Medications',
+  Allergies: 'Allergies',
+  // Progress note sections
+  IntervalHistory: 'Interval History',
+  Labs: 'Laboratory Results',
+  Vitals: 'Vital Signs',
+  CurrentMedications: 'Current Medications',
+  // ED sections
+  MDM: 'Medical Decision Making',
+  // Generic
+  Comments: 'Comments',
 };
 
 export default function FaxDetailPage() {
@@ -219,8 +376,15 @@ export default function FaxDetailPage() {
                 Back to Dashboard
               </Link>
               <h1 className="text-3xl font-bold text-gray-900">Fax #{fax.id}</h1>
-              <div className="flex items-center gap-3 mt-2">
+              <div className="flex items-center gap-3 mt-2 flex-wrap">
                 <StatusBadge status={fax.status} />
+                {fax.documentType && (
+                  <DocumentTypeBadge 
+                    type={fax.documentType} 
+                    subtype={fax.documentSubtype}
+                    confidence={fax.confidence} 
+                  />
+                )}
                 <span className="text-gray-600">
                   Received: {new Date(fax.receivedAt).toLocaleString()}
                 </span>
@@ -277,39 +441,46 @@ export default function FaxDetailPage() {
           )}
 
           {/* Fax Info */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Fax Information</h2>
-              {fax.pdfPath && (
-                <a
-                  href={`/api/faxes/${fax.id}/pdf`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center gap-2 text-sm"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
-                  View Original PDF
-                </a>
-              )}
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-gray-500">From Number: </span>
-                <span className="font-medium">{fax.fromNumber}</span>
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8 overflow-hidden">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-lg font-semibold text-gray-900">Fax Information</h2>
+                {fax.pdfPath && (
+                  <a
+                    href={`/api/faxes/${fax.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center gap-2 text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    View Original PDF
+                  </a>
+                )}
               </div>
-              <div>
-                <span className="text-gray-500">Received: </span>
-                <span className="font-medium">{new Date(fax.receivedAt).toLocaleString()}</span>
-              </div>
-              {fax.externalId && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-500">External ID: </span>
-                  <span className="font-medium">{fax.externalId}</span>
+                  <span className="text-gray-500">From Number: </span>
+                  <span className="font-medium">{fax.fromNumber}</span>
                 </div>
-              )}
+                <div>
+                  <span className="text-gray-500">Received: </span>
+                  <span className="font-medium">{new Date(fax.receivedAt).toLocaleString()}</span>
+                </div>
+                {fax.externalId && (
+                  <div>
+                    <span className="text-gray-500">External ID: </span>
+                    <span className="font-medium">{fax.externalId}</span>
+                  </div>
+                )}
+              </div>
             </div>
+            
+            {/* Original Document Text - Collapsible */}
+            {fax.rawText && (
+              <OriginalTextInline rawText={fax.rawText} />
+            )}
           </div>
 
           {/* Fax Metadata */}

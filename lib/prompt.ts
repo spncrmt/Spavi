@@ -1,6 +1,9 @@
 /**
  * Prompt template for converting clinical text into Epic SmartSection format
+ * Supports multiple document types with specialized prompts
  */
+
+import { DocumentType } from './documentClassifier';
 
 /**
  * Fax metadata extracted from the input document
@@ -17,48 +20,449 @@ export interface FaxMetadata {
 }
 
 export interface SmartSections {
-  ChiefComplaint: string;
+  // Common sections
+  ChiefComplaint?: string;
   ChiefComplaint_sources?: string[];
-  HPI: string;
+  HPI?: string;
   HPI_sources?: string[];
-  ReviewOfSystems: string;
+  ReviewOfSystems?: string;
   ReviewOfSystems_sources?: string[];
-  PhysicalExam: string;
+  PhysicalExam?: string;
   PhysicalExam_sources?: string[];
-  Assessment: string;
+  Assessment?: string;
   Assessment_sources?: string[];
-  Plan: string;
+  Plan?: string;
   Plan_sources?: string[];
-  Disposition: string;
+  Disposition?: string;
   Disposition_sources?: string[];
+  
+  // Pathology-specific sections
+  SpecimenInfo?: string;
+  SpecimenInfo_sources?: string[];
+  GrossDescription?: string;
+  GrossDescription_sources?: string[];
+  MicroscopicDescription?: string;
+  MicroscopicDescription_sources?: string[];
+  Diagnosis?: string;
+  Diagnosis_sources?: string[];
+  TNMStaging?: string;
+  TNMStaging_sources?: string[];
+  SynopticReport?: string;
+  SynopticReport_sources?: string[];
+  
+  // Radiology-specific sections
+  ExamType?: string;
+  ExamType_sources?: string[];
+  ClinicalHistory?: string;
+  ClinicalHistory_sources?: string[];
+  Comparison?: string;
+  Comparison_sources?: string[];
+  Technique?: string;
+  Technique_sources?: string[];
+  Findings?: string;
+  Findings_sources?: string[];
+  Impression?: string;
+  Impression_sources?: string[];
+  Recommendations?: string;
+  Recommendations_sources?: string[];
+  
+  // Consultation-specific sections
+  ReasonForConsult?: string;
+  ReasonForConsult_sources?: string[];
+  
+  // Lab-specific sections
+  TestName?: string;
+  TestName_sources?: string[];
+  Results?: string;
+  Results_sources?: string[];
+  ReferenceRange?: string;
+  ReferenceRange_sources?: string[];
+  Flags?: string;
+  Flags_sources?: string[];
+  
+  // Operative-specific sections
+  PreoperativeDiagnosis?: string;
+  PreoperativeDiagnosis_sources?: string[];
+  PostoperativeDiagnosis?: string;
+  PostoperativeDiagnosis_sources?: string[];
+  Procedure?: string;
+  Procedure_sources?: string[];
+  Surgeon?: string;
+  Surgeon_sources?: string[];
+  Anesthesia?: string;
+  Anesthesia_sources?: string[];
+  EstimatedBloodLoss?: string;
+  EstimatedBloodLoss_sources?: string[];
+  Complications?: string;
+  Complications_sources?: string[];
+  
+  // Discharge-specific sections
+  AdmissionDate?: string;
+  AdmissionDate_sources?: string[];
+  DischargeDate?: string;
+  DischargeDate_sources?: string[];
+  AdmittingDiagnosis?: string;
+  AdmittingDiagnosis_sources?: string[];
+  DischargeDiagnosis?: string;
+  DischargeDiagnosis_sources?: string[];
+  HospitalCourse?: string;
+  HospitalCourse_sources?: string[];
+  DischargeMedications?: string;
+  DischargeMedications_sources?: string[];
+  DischargeInstructions?: string;
+  DischargeInstructions_sources?: string[];
+  FollowUp?: string;
+  FollowUp_sources?: string[];
+  
+  // H&P-specific sections
+  PMH?: string;
+  PMH_sources?: string[];
+  PSH?: string;
+  PSH_sources?: string[];
+  FamilyHistory?: string;
+  FamilyHistory_sources?: string[];
+  SocialHistory?: string;
+  SocialHistory_sources?: string[];
+  Medications?: string;
+  Medications_sources?: string[];
+  Allergies?: string;
+  Allergies_sources?: string[];
+  
+  // Progress note sections
+  IntervalHistory?: string;
+  IntervalHistory_sources?: string[];
+  Labs?: string;
+  Labs_sources?: string[];
+  Vitals?: string;
+  Vitals_sources?: string[];
+  CurrentMedications?: string;
+  CurrentMedications_sources?: string[];
+  
+  // ED note sections
+  MDM?: string;
+  MDM_sources?: string[];
+  
+  // Generic comments
+  Comments?: string;
+  Comments_sources?: string[];
+  
+  // Allow dynamic keys
+  [key: string]: string | string[] | undefined;
+}
+
+// ============================================================================
+// Section definitions by document type
+// ============================================================================
+
+const SECTION_DEFINITIONS: Record<string, Record<string, string>> = {
+  clinical_note: {
+    ChiefComplaint: "The main reason for the patient's visit in one concise sentence",
+    HPI: "Patient's symptoms, timeline, and relevant history as a single paragraph",
+    ReviewOfSystems: "A systematic review of body systems with positive and pertinent negative findings",
+    PhysicalExam: "Vital signs and physical examination findings as a single paragraph",
+    Assessment: "Diagnosis or clinical impression as a single paragraph",
+    Plan: "Treatment plan, prescriptions, follow-up instructions as a single paragraph",
+    Disposition: "Discharge status, follow-up instructions, and return precautions",
+  },
+  
+  pathology: {
+    SpecimenInfo: "Specimen identification: accession number, collection date, specimen type/source, laterality if applicable",
+    GrossDescription: "Macroscopic examination findings: size, color, consistency, notable features",
+    MicroscopicDescription: "Histologic findings: cellular architecture, nuclear features, mitotic activity, special stains",
+    Diagnosis: "Final pathologic diagnosis with any applicable grading or classification",
+    TNMStaging: "TNM cancer staging if applicable: T (tumor), N (nodes), M (metastasis) with stage grouping",
+    SynopticReport: "Structured synoptic elements if present (margins, lymphovascular invasion, etc.)",
+    Comments: "Additional pathologist comments, recommendations, or correlations",
+  },
+  
+  radiology: {
+    ExamType: "Type of imaging study performed (CT, MRI, X-ray, Ultrasound, etc.) and body region",
+    ClinicalHistory: "Reason for exam, relevant clinical history, and specific clinical question",
+    Comparison: "Prior studies available for comparison with dates",
+    Technique: "Imaging technique, contrast administration, sequences/protocols used",
+    Findings: "Detailed observations organized by anatomic region or organ system",
+    Impression: "Summary interpretation with differential diagnosis if applicable",
+    Recommendations: "Suggested follow-up imaging, clinical correlation, or additional evaluation",
+  },
+  
+  consultation: {
+    ReasonForConsult: "The specific question or reason the consultation was requested",
+    HPI: "History focused on the consultation question",
+    ReviewOfSystems: "Pertinent positive and negative symptoms related to consultation",
+    PhysicalExam: "Focused physical examination findings relevant to consultation",
+    Assessment: "Consultant's clinical assessment and reasoning",
+    Recommendations: "Specific recommendations to the referring provider with rationale",
+  },
+  
+  lab_results: {
+    TestName: "Name of laboratory test(s) performed",
+    Results: "Test results with values and units",
+    ReferenceRange: "Normal reference ranges for comparison",
+    Flags: "Abnormal flags (High, Low, Critical) if present",
+    Comments: "Laboratory comments or interpretive notes",
+  },
+  
+  toxicology: {
+    SpecimenInfo: "Specimen type, collection date/time, chain of custody information",
+    Results: "Drug panel results: substances tested with positive/negative/detected status",
+    Comments: "Confirmation testing, cutoff levels, or interpretive notes",
+  },
+  
+  discharge: {
+    AdmissionDate: "Date of hospital admission",
+    DischargeDate: "Date of hospital discharge",
+    AdmittingDiagnosis: "Diagnosis at time of admission",
+    DischargeDiagnosis: "Final diagnoses at discharge",
+    HospitalCourse: "Summary of hospital stay including key events, procedures, treatments",
+    DischargeMedications: "Complete list of medications at discharge with dosing",
+    DischargeInstructions: "Activity restrictions, diet, wound care, and other patient instructions",
+    FollowUp: "Follow-up appointments and provider contact information",
+  },
+  
+  operative: {
+    PreoperativeDiagnosis: "Diagnosis before surgery",
+    PostoperativeDiagnosis: "Diagnosis after surgery (may include operative findings)",
+    Procedure: "Name of procedure(s) performed",
+    Surgeon: "Operating surgeon and assistants",
+    Anesthesia: "Type of anesthesia used",
+    Findings: "Intraoperative findings",
+    EstimatedBloodLoss: "Estimated blood loss during procedure",
+    Complications: "Any intraoperative complications or 'None'",
+    Disposition: "Patient condition and disposition after procedure",
+  },
+  
+  ed_note: {
+    ChiefComplaint: "Primary reason for ED visit",
+    HPI: "History of present illness with timing, severity, associated symptoms",
+    ReviewOfSystems: "Pertinent positives and negatives",
+    PhysicalExam: "Physical examination findings including vitals",
+    MDM: "Medical decision making: data reviewed, risk assessment, complexity",
+    Assessment: "Diagnoses or differential diagnoses",
+    Plan: "Treatment provided in ED, tests ordered, consultations",
+    Disposition: "Discharge or admission status with instructions",
+  },
+  
+  progress_note: {
+    IntervalHistory: "Events since last note, overnight events, patient complaints",
+    Vitals: "Current vital signs",
+    Labs: "Relevant laboratory results",
+    CurrentMedications: "Current medication list",
+    PhysicalExam: "Focused physical examination findings",
+    Assessment: "Current clinical assessment by problem",
+    Plan: "Plan for each active problem",
+  },
+  
+  h_and_p: {
+    ChiefComplaint: "Primary reason for admission/visit",
+    HPI: "Detailed history of present illness",
+    PMH: "Past medical history",
+    PSH: "Past surgical history",
+    FamilyHistory: "Relevant family medical history",
+    SocialHistory: "Social history including tobacco, alcohol, drugs, occupation",
+    Medications: "Current medications with doses",
+    Allergies: "Drug allergies and reactions",
+    ReviewOfSystems: "Complete review of systems",
+    PhysicalExam: "Complete physical examination",
+    Assessment: "Clinical assessment and problem list",
+    Plan: "Diagnostic and treatment plan",
+  },
+};
+
+/**
+ * Get sections appropriate for a document type
+ */
+export function getSectionsForDocumentType(documentType: DocumentType | string): string[] {
+  const sections = SECTION_DEFINITIONS[documentType];
+  if (sections) {
+    return Object.keys(sections);
+  }
+  // Default to clinical note sections
+  return Object.keys(SECTION_DEFINITIONS.clinical_note);
+}
+
+/**
+ * Get all section descriptions combining base definitions with type-specific ones
+ */
+function getAllSectionDescriptions(documentType?: DocumentType | string): Record<string, string> {
+  // Base clinical note descriptions
+  const baseDescriptions: Record<string, string> = {
+    ChiefComplaint: "ChiefComplaint: The main reason for the patient's visit in one concise sentence",
+    HPI: "HPI (History of Present Illness): Patient's symptoms, timeline, and relevant history as a single paragraph",
+    ReviewOfSystems: "ReviewOfSystems: A systematic review of body systems with positive and pertinent negative findings",
+    PhysicalExam: "PhysicalExam: Vital signs and physical examination findings as a single paragraph",
+    Assessment: "Assessment: Diagnosis or clinical impression as a single paragraph",
+    Plan: "Plan: Treatment plan, prescriptions, follow-up instructions as a single paragraph",
+    Disposition: "Disposition: Discharge status, follow-up instructions, and return precautions",
+    // Pathology sections
+    SpecimenInfo: "SpecimenInfo: Specimen ID, accession number, collection date, specimen type and source",
+    GrossDescription: "GrossDescription: Macroscopic examination findings (size, color, consistency)",
+    MicroscopicDescription: "MicroscopicDescription: Histologic findings and cellular characteristics",
+    Diagnosis: "Diagnosis: Final pathologic diagnosis with grading/classification",
+    TNMStaging: "TNMStaging: TNM cancer staging if applicable (T, N, M values and stage grouping)",
+    SynopticReport: "SynopticReport: Structured synoptic elements (margins, invasion, etc.)",
+    // Radiology sections
+    ExamType: "ExamType: Type of imaging study and body region examined",
+    ClinicalHistory: "ClinicalHistory: Reason for exam and relevant clinical history",
+    Comparison: "Comparison: Prior studies available for comparison with dates",
+    Technique: "Technique: Imaging technique, contrast, sequences/protocols used",
+    Findings: "Findings: Detailed observations by anatomic region",
+    Impression: "Impression: Summary interpretation with differential diagnosis",
+    Recommendations: "Recommendations: Suggested follow-up or additional evaluation",
+    // Consultation sections
+    ReasonForConsult: "ReasonForConsult: The specific question or reason for consultation",
+    // Lab sections
+    TestName: "TestName: Name of laboratory test(s) performed",
+    Results: "Results: Test results with values and units",
+    ReferenceRange: "ReferenceRange: Normal reference ranges for comparison",
+    Flags: "Flags: Abnormal flags (High, Low, Critical) if present",
+    // Operative sections
+    PreoperativeDiagnosis: "PreoperativeDiagnosis: Diagnosis before surgery",
+    PostoperativeDiagnosis: "PostoperativeDiagnosis: Diagnosis after surgery",
+    Procedure: "Procedure: Name of procedure(s) performed",
+    Surgeon: "Surgeon: Operating surgeon and assistants",
+    Anesthesia: "Anesthesia: Type of anesthesia used",
+    EstimatedBloodLoss: "EstimatedBloodLoss: Estimated blood loss during procedure",
+    Complications: "Complications: Any intraoperative complications or 'None'",
+    // Discharge sections
+    AdmissionDate: "AdmissionDate: Date of hospital admission",
+    DischargeDate: "DischargeDate: Date of hospital discharge",
+    AdmittingDiagnosis: "AdmittingDiagnosis: Diagnosis at time of admission",
+    DischargeDiagnosis: "DischargeDiagnosis: Final diagnoses at discharge",
+    HospitalCourse: "HospitalCourse: Summary of hospital stay, events, procedures, treatments",
+    DischargeMedications: "DischargeMedications: Complete medication list at discharge with dosing",
+    DischargeInstructions: "DischargeInstructions: Activity restrictions, diet, wound care instructions",
+    FollowUp: "FollowUp: Follow-up appointments and provider contact information",
+    // H&P sections
+    PMH: "PMH (Past Medical History): Chronic conditions and prior diagnoses",
+    PSH: "PSH (Past Surgical History): Prior surgeries with dates",
+    FamilyHistory: "FamilyHistory: Relevant family medical history",
+    SocialHistory: "SocialHistory: Tobacco, alcohol, drugs, occupation, living situation",
+    Medications: "Medications: Current medications with doses",
+    Allergies: "Allergies: Drug allergies and reactions",
+    // Progress note sections
+    IntervalHistory: "IntervalHistory: Events since last note, overnight events, patient complaints",
+    Vitals: "Vitals: Current vital signs",
+    Labs: "Labs: Relevant laboratory results",
+    CurrentMedications: "CurrentMedications: Current medication list",
+    // ED sections
+    MDM: "MDM (Medical Decision Making): Data reviewed, risk assessment, complexity level",
+    // Generic
+    Comments: "Comments: Additional notes or observations",
+  };
+  
+  return baseDescriptions;
+}
+
+/**
+ * Get document type-specific preamble for the prompt
+ */
+function getDocumentTypePreamble(documentType?: DocumentType | string): string {
+  const preambles: Record<string, string> = {
+    pathology: `You are processing a PATHOLOGY REPORT. Focus on:
+- Specimen information (accession number, collection date, source)
+- Gross and microscopic descriptions
+- Final pathologic diagnosis with any grading
+- TNM staging if cancer-related
+- Synoptic reporting elements if present`,
+    
+    radiology: `You are processing a RADIOLOGY REPORT. Focus on:
+- Type of imaging study and body region
+- Clinical indication for the exam
+- Comparison with prior studies
+- Detailed findings by anatomic region
+- Impression (diagnosis/differential)
+- Recommendations for follow-up`,
+    
+    consultation: `You are processing a CONSULTATION REPORT. Focus on:
+- Reason for consultation
+- Focused history related to the consultation question
+- Assessment addressing the specific clinical question
+- Clear recommendations to the referring provider`,
+    
+    lab_results: `You are processing LABORATORY RESULTS. Focus on:
+- Test names and types
+- Result values with units
+- Reference ranges
+- Abnormal flags (High, Low, Critical)
+- Any interpretive comments`,
+    
+    toxicology: `You are processing a TOXICOLOGY REPORT. Focus on:
+- Specimen type and collection information
+- Substances tested
+- Positive/Negative/Detected results
+- Confirmation testing details
+- Cutoff levels if provided`,
+    
+    discharge: `You are processing a DISCHARGE SUMMARY. Focus on:
+- Admission and discharge dates
+- Admitting and discharge diagnoses
+- Hospital course summary
+- Discharge medications with dosing
+- Discharge instructions and follow-up`,
+    
+    operative: `You are processing an OPERATIVE REPORT. Focus on:
+- Pre and post-operative diagnoses
+- Procedure performed
+- Surgeon and anesthesia information
+- Operative findings
+- Estimated blood loss and complications
+- Patient disposition`,
+    
+    ed_note: `You are processing an EMERGENCY DEPARTMENT NOTE. Focus on:
+- Chief complaint and HPI
+- Medical decision making (MDM) complexity
+- Assessment and differential diagnoses
+- Treatment provided in ED
+- Disposition and return precautions`,
+    
+    progress_note: `You are processing a PROGRESS NOTE. Focus on:
+- Interval history since last note
+- Current vitals and labs
+- Focused physical exam
+- Assessment by problem
+- Plan for each active issue`,
+    
+    h_and_p: `You are processing a HISTORY AND PHYSICAL. Focus on:
+- Complete HPI
+- Past medical/surgical history
+- Family and social history
+- Medications and allergies
+- Complete review of systems
+- Full physical examination
+- Assessment and plan`,
+  };
+  
+  return preambles[documentType || ''] || '';
 }
 
 /**
  * Generates the system prompt for the AI model
  */
-export function getSystemPrompt(selectedSections?: string[]): string {
-  const sections = selectedSections || ['HPI', 'PhysicalExam', 'Assessment', 'Plan'];
+export function getSystemPrompt(selectedSections?: string[], documentType?: DocumentType | string): string {
+  // Use document-type-specific sections if no sections specified
+  const sections = selectedSections && selectedSections.length > 0
+    ? selectedSections
+    : getSectionsForDocumentType(documentType || 'clinical_note');
 
-  const sectionDescriptions: Record<string, string> = {
-    ChiefComplaint: "ChiefComplaint: The main reason for the patient's visit in one concise sentence",
-    HPI: "HPI (History of Present Illness): Patient's symptoms, timeline, and relevant history as a single paragraph",
-    ReviewOfSystems: "ReviewOfSystems: A systematic review of body systems - list each system reviewed with positive and pertinent negative findings (constitutional, HEENT, cardiovascular, respiratory, GI, GU, musculoskeletal, skin, neurological, psychiatric)",
-    PhysicalExam: "PhysicalExam: Vital signs and physical examination findings as a single paragraph (combine all findings)",
-    Assessment: "Assessment: Diagnosis or clinical impression as a single paragraph",
-    Plan: "Plan: Treatment plan, prescriptions, follow-up instructions as a single paragraph",
-    Disposition: "Disposition: Discharge status, follow-up instructions, and return precautions/warning signs"
-  };
+  const sectionDescriptions = getAllSectionDescriptions(documentType);
+  const typePreamble = getDocumentTypePreamble(documentType);
 
   const requestedGuidelines = sections
-    .map(section => `- ${sectionDescriptions[section]}`)
+    .map(section => {
+      const desc = sectionDescriptions[section];
+      return desc ? `- ${desc}` : `- ${section}: Extract and format this section`;
+    })
     .join('\n');
 
   const exampleKeys = sections.join(', ');
 
   const sourceKeys = sections.map(s => `${s}_sources`).join(', ');
 
-  return `You are a medical scribe assistant. Your task is to structure clinical notes into Epic SmartSections and extract fax/referral metadata.
+  // Build the prompt with optional document type preamble
+  const documentTypeInstruction = typePreamble ? `\n\nDOCUMENT TYPE DETECTED:\n${typePreamble}\n` : '';
 
+  return `You are a medical scribe assistant. Your task is to structure clinical notes into Epic SmartSections and extract fax/referral metadata.
+${documentTypeInstruction}
 Return ONLY a valid JSON object with these keys: "metadata", ${exampleKeys}, and for each section include a sources array: ${sourceKeys}.
 
 METADATA EXTRACTION (do this FIRST - be thorough!):
@@ -255,15 +659,125 @@ Include abbreviations exactly as written (e.g., "RRR", "PERRLA", "NAD", "BID", "
 }
 
 /**
+ * Get document-type-specific guidance for local models
+ */
+function getDocumentTypeGuidanceForLocal(documentType?: DocumentType, sections?: string[]): string {
+  const sectionDescriptions = sections?.map(s => {
+    const desc = getAllSectionDescriptions(documentType)[s];
+    return desc ? `- ${desc}` : `- ${s}: Extract relevant information for this field`;
+  }).join('\n') || '';
+  
+  const examples: Record<string, string> = {
+    pathology: `EXAMPLE OUTPUT for Pathology Report:
+{
+  "metadata": {"patientName": "Test Patient", "mrn": "12345"},
+  "SpecimenInfo": "Colon, sigmoid; biopsy received 01/25/2026",
+  "SpecimenInfo_sources": ["Colon, sigmoid biopsy", "Collected: 2026-01-25"],
+  "GrossDescription": "Three tan-pink tissue fragments measuring up to 0.3 cm",
+  "GrossDescription_sources": ["Three tan-pink tissue fragments measuring up to 0.3 cm"],
+  "MicroscopicDescription": "Colonic mucosa with mild chronic inflammation. No dysplasia identified.",
+  "MicroscopicDescription_sources": ["Colonic mucosa with mild chronic inflammation", "No dysplasia identified"],
+  "Diagnosis": "Benign colonic mucosa; negative for malignancy",
+  "Diagnosis_sources": ["Benign colonic mucosa", "negative for malignancy"]
+}`,
+    
+    radiology: `EXAMPLE OUTPUT for Radiology Report:
+{
+  "metadata": {"patientName": "Test Patient"},
+  "ExamType": "CT Abdomen/Pelvis with contrast",
+  "ExamType_sources": ["CT Abdomen/Pelvis with contrast"],
+  "ClinicalHistory": "Abdominal pain",
+  "ClinicalHistory_sources": ["Abdominal pain"],
+  "Findings": "Liver, spleen, and pancreas are unremarkable. No free air or fluid. Appendix appears normal.",
+  "Findings_sources": ["Liver, spleen, pancreas unremarkable", "No free air or fluid", "Appendix normal"],
+  "Impression": "No acute intra-abdominal process identified",
+  "Impression_sources": ["No acute intra-abdominal process identified"]
+}`,
+    
+    lab_results: `EXAMPLE OUTPUT for Lab Results:
+{
+  "metadata": {"patientName": "Test Patient"},
+  "TestName": "Complete Blood Count, Basic Metabolic Panel",
+  "TestName_sources": ["Complete Blood Count", "Basic Metabolic Panel"],
+  "Results": "WBC: 6.1, Hemoglobin: 14.2, Platelets: 245, Sodium: 140, Creatinine: 0.9",
+  "Results_sources": ["WBC: 6.1 x10^3/uL", "Hemoglobin: 14.2 g/dL", "Platelets: 245 x10^3/uL", "Sodium: 140 mmol/L", "Creatinine: 0.9 mg/dL"],
+  "ReferenceRange": "WBC: 4.0-11.0, Hemoglobin: 13.5-17.5, Platelets: 150-450, Sodium: 135-145, Creatinine: 0.6-1.3",
+  "ReferenceRange_sources": ["Ref 4.0–11.0", "Ref 13.5–17.5", "Ref 150–450", "Ref 135–145", "Ref 0.6–1.3"]
+}`,
+    
+    toxicology: `EXAMPLE OUTPUT for Toxicology Report:
+{
+  "metadata": {"patientName": "Test Patient"},
+  "SpecimenInfo": "Urine specimen",
+  "SpecimenInfo_sources": ["Specimen: Urine"],
+  "Results": "Amphetamines: Negative, Benzodiazepines: Negative, Opioids: Negative, THC: Negative",
+  "Results_sources": ["Amphetamines: Negative", "Benzodiazepines: Negative", "Opioids: Negative", "THC: Negative"]
+}`,
+    
+    discharge: `EXAMPLE OUTPUT for Discharge Summary:
+{
+  "metadata": {"patientName": "Test Patient"},
+  "AdmissionDate": "2026-01-01",
+  "AdmissionDate_sources": ["Admission Date: 2026-01-01"],
+  "DischargeDate": "2026-01-02",
+  "DischargeDate_sources": ["Discharge Date: 2026-01-02"],
+  "DischargeDiagnosis": "Observation, no acute findings",
+  "DischargeDiagnosis_sources": ["Primary Diagnosis: Observation, no acute findings"],
+  "HospitalCourse": "Patient was observed overnight. No complications occurred during the hospital stay.",
+  "HospitalCourse_sources": ["Patient observed overnight", "No complications"],
+  "DischargeMedications": "None",
+  "DischargeMedications_sources": ["Discharge Medications: None"],
+  "FollowUp": "Primary care follow-up in 1-2 weeks",
+  "FollowUp_sources": ["Follow-Up: Primary care in 1–2 weeks"]
+}`,
+  };
+  
+  const example = documentType && examples[documentType] ? examples[documentType] : examples.discharge;
+  
+  return `DOCUMENT TYPE: ${documentType?.toUpperCase() || 'CLINICAL DOCUMENT'}
+
+SECTIONS TO EXTRACT:
+${sectionDescriptions}
+
+${example}`;
+}
+
+/**
  * Simplified prompt for local models (Ollama/Llama)
  * Local models work better with more concise, direct instructions
+ * Now document-type aware for better section extraction
  */
-export function getLocalModelPrompt(clinicalText: string, selectedSections?: string[]): string {
+export function getLocalModelPrompt(clinicalText: string, selectedSections?: string[], documentType?: DocumentType): string {
   const sections = selectedSections || ['HPI', 'PhysicalExam', 'Assessment', 'Plan'];
   const sectionKeys = sections.join('", "');
   const sourceKeys = sections.map(s => `${s}_sources`).join('", "');
+  
+  // Get document-type-specific guidance
+  const typeGuidance = getDocumentTypeGuidanceForLocal(documentType, sections);
 
-  return `You are a medical scribe creating professional Epic SmartPhrase documentation.
+  return `You are a medical documentation assistant. Extract information from the document and format it as JSON.
+
+${typeGuidance}
+
+CRITICAL RULES:
+1. Extract information EXACTLY as it appears in the document
+2. Each section should have a "_sources" array with the exact text used
+3. If information is not found for a section, use "Not found in document"
+4. Return ONLY valid JSON - no other text
+5. Include a "metadata" object with patient info if available
+
+REQUIRED JSON STRUCTURE:
+{
+  "metadata": {"patientName": "...", "dateOfBirth": "...", "mrn": "..."},
+  "${sectionKeys}": "extracted content here",
+  "${sourceKeys}": ["source quote 1", "source quote 2"]
+}
+
+---DOCUMENT---
+${clinicalText}
+---END---
+
+Return JSON only:`;
 
 DOCUMENTATION STANDARDS:
 1. Use COMPLETE SENTENCES (not fragments)

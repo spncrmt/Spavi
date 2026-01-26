@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getSystemPrompt, getUserPrompt, getLocalModelPrompt, SmartSections, FaxMetadata } from '@/lib/prompt';
+import { getSystemPrompt, getUserPrompt, getLocalModelPrompt, SmartSections, FaxMetadata, getSectionsForDocumentType } from '@/lib/prompt';
+import { DocumentType } from '@/lib/documentClassifier';
 
 // AI Provider types
 export type AIProvider = 'claude' | 'openai' | 'ollama';
@@ -8,6 +9,7 @@ interface GenerateRequest {
   text: string;
   selectedSections?: string[];
   provider?: AIProvider; // Optional override from UI
+  documentType?: DocumentType; // Document type for specialized processing
 }
 
 interface GenerateResponse {
@@ -51,16 +53,16 @@ export default async function handler(
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { text, selectedSections, provider: requestedProvider } = req.body as GenerateRequest;
+  const { text, selectedSections, provider: requestedProvider, documentType } = req.body as GenerateRequest;
 
   if (!text || text.trim().length === 0) {
     return res.status(400).json({ error: 'Clinical text is required' });
   }
 
-  // Default to all sections if none specified
+  // Use document-type-specific sections if no sections specified
   const sectionsToGenerate = selectedSections && selectedSections.length > 0
     ? selectedSections
-    : ['HPI', 'PhysicalExam', 'Assessment', 'Plan'];
+    : getSectionsForDocumentType(documentType || 'clinical_note');
 
   // Determine which provider to use
   const provider = getProvider(requestedProvider);
@@ -86,13 +88,13 @@ export default async function handler(
 
     switch (provider) {
       case 'claude':
-        result = await callClaudeAPI(text, claudeApiKey!, sectionsToGenerate);
+        result = await callClaudeAPI(text, claudeApiKey!, sectionsToGenerate, documentType);
         break;
       case 'openai':
-        result = await callOpenAI(text, openaiApiKey!, sectionsToGenerate);
+        result = await callOpenAI(text, openaiApiKey!, sectionsToGenerate, documentType);
         break;
       case 'ollama':
-        result = await callOllama(text, sectionsToGenerate);
+        result = await callOllama(text, sectionsToGenerate, documentType);
         break;
       default:
         throw new Error(`Unknown provider: ${provider}`);
@@ -319,7 +321,7 @@ function validateAndNormalizeSections(rawResponse: any, requestedSections: strin
 /**
  * Call Anthropic Claude API
  */
-async function callClaudeAPI(text: string, apiKey: string, selectedSections: string[]): Promise<{ sections: SmartSections; metadata?: FaxMetadata }> {
+async function callClaudeAPI(text: string, apiKey: string, selectedSections: string[], documentType?: DocumentType): Promise<{ sections: SmartSections; metadata?: FaxMetadata }> {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -333,7 +335,7 @@ async function callClaudeAPI(text: string, apiKey: string, selectedSections: str
       messages: [
         {
           role: 'user',
-          content: `${getSystemPrompt(selectedSections)}\n\n${getUserPrompt(text, selectedSections)}`,
+          content: `${getSystemPrompt(selectedSections, documentType)}\n\n${getUserPrompt(text, selectedSections)}`,
         },
       ],
     }),
@@ -360,7 +362,7 @@ async function callClaudeAPI(text: string, apiKey: string, selectedSections: str
 /**
  * Call OpenAI GPT API
  */
-async function callOpenAI(text: string, apiKey: string, selectedSections: string[]): Promise<{ sections: SmartSections; metadata?: FaxMetadata }> {
+async function callOpenAI(text: string, apiKey: string, selectedSections: string[], documentType?: DocumentType): Promise<{ sections: SmartSections; metadata?: FaxMetadata }> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -372,7 +374,7 @@ async function callOpenAI(text: string, apiKey: string, selectedSections: string
       messages: [
         {
           role: 'system',
-          content: getSystemPrompt(selectedSections),
+          content: getSystemPrompt(selectedSections, documentType),
         },
         {
           role: 'user',
@@ -497,13 +499,15 @@ function parseJSONWithRepair(jsonString: string): any {
  * Call local Ollama API
  * Ollama provides local LLM inference with no external API calls
  */
-async function callOllama(text: string, selectedSections: string[]): Promise<{ sections: SmartSections; metadata?: FaxMetadata }> {
+async function callOllama(text: string, selectedSections: string[], documentType?: DocumentType): Promise<{ sections: SmartSections; metadata?: FaxMetadata }> {
   const baseUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   const model = process.env.OLLAMA_MODEL || 'llama3.1';
 
   // Use simplified prompt for local models (better performance with smaller models)
-  const prompt = getLocalModelPrompt(text, selectedSections);
+  // Now enhanced with document type awareness for better section extraction
+  const prompt = getLocalModelPrompt(text, selectedSections, documentType);
   console.log('Ollama prompt length:', prompt.length, 'chars');
+  console.log('Document type for Ollama:', documentType || 'default');
 
   try {
     // Use AbortController for timeout (5 minutes for long documents)

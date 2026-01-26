@@ -7,6 +7,9 @@ interface FaxListItem {
   fromNumber: string;
   receivedAt: string;
   status: string;
+  documentType: string | null;
+  documentSubtype: string | null;
+  confidence: number | null;
   metadata: {
     patientName?: string;
     dateOfBirth?: string;
@@ -56,6 +59,9 @@ export default async function handler(
         fromNumber: true,
         receivedAt: true,
         status: true,
+        documentType: true,
+        documentSubtype: true,
+        confidence: true,
         metadata: true,
         errorMessage: true,
         createdAt: true,
@@ -70,6 +76,9 @@ export default async function handler(
       fromNumber: fax.fromNumber,
       receivedAt: fax.receivedAt.toISOString(),
       status: fax.status,
+      documentType: fax.documentType,
+      documentSubtype: fax.documentSubtype,
+      confidence: fax.confidence,
       metadata: fax.metadata ? JSON.parse(fax.metadata) : null,
       errorMessage: fax.errorMessage,
       createdAt: fax.createdAt.toISOString(),
