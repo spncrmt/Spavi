@@ -777,7 +777,7 @@ REQUIRED JSON STRUCTURE:
 ${clinicalText}
 ---END---
 
-Return JSON only:`;
+Return JSON only.
 
 DOCUMENTATION STANDARDS:
 1. Use COMPLETE SENTENCES (not fragments)
