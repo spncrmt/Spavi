@@ -9,7 +9,7 @@
  * All processing happens locally - no data is sent externally.
  */
 
-import { pipeline, Pipeline } from '@xenova/transformers';
+import { pipeline, TokenClassificationPipeline } from '@xenova/transformers';
 
 // ============================================================================
 // Types
@@ -38,8 +38,8 @@ interface PHIPattern {
 // NER Model (Lazy Loading) - Using multilingual model for better name coverage
 // ============================================================================
 
-let nerPipeline: Pipeline | null = null;
-let nerLoadingPromise: Promise<Pipeline> | null = null;
+let nerPipeline: TokenClassificationPipeline | null = null;
+let nerLoadingPromise: Promise<TokenClassificationPipeline> | null = null;
 
 // Model options - multilingual handles diverse names better
 const NER_MODEL = 'Xenova/bert-base-multilingual-cased-ner-hrl';
@@ -50,7 +50,7 @@ const NER_MODEL_FALLBACK = 'Xenova/bert-base-NER';
  * Lazily load the NER model - only loads on first use
  * Uses multilingual model for better coverage of non-Western names
  */
-async function getNERPipeline(): Promise<Pipeline> {
+async function getNERPipeline(): Promise<TokenClassificationPipeline> {
   if (nerPipeline) {
     return nerPipeline;
   }
@@ -653,7 +653,7 @@ export function reidentify(text: string, redactions: Redaction[]): string {
   
   // Replace each placeholder type with its original value(s)
   // If multiple values exist for a placeholder type, use them in order
-  for (const [placeholder, values] of map.entries()) {
+  for (const [placeholder, values] of Array.from(map.entries())) {
     if (values.length === 0) continue;
     
     let valueIndex = 0;
