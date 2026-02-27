@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
+import { useRouter } from 'next/router';
 import ManualUploadModal from '@/components/ManualUploadModal';
 import ProviderToggle, { AIProvider } from '@/components/ProviderToggle';
 
@@ -184,12 +185,17 @@ function getPatientIdentifier(fax: FaxListItem): string | null {
 }
 
 export default function Dashboard() {
+  const router = useRouter();
   const [faxes, setFaxes] = useState<FaxListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>('incoming');
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [aiProvider, setAiProvider] = useState<AIProvider>('claude');
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const dragCounter = useRef(0);
 
   const fetchFaxes = useCallback(async () => {
     try {
@@ -256,10 +262,127 @@ export default function Dashboard() {
         throw new Error('Failed to update fax status');
       }
 
-      // Refresh the list
       fetchFaxes();
     } catch (err) {
       console.error('Error marking fax as reviewed:', err);
+    }
+  };
+
+  const handleDelete = async (id: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (!confirm('Are you sure you want to delete this fax?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/faxes/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete fax');
+      }
+
+      fetchFaxes();
+    } catch (err) {
+      console.error('Error deleting fax:', err);
+    }
+  };
+
+  const handleRetry = async (id: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      const response = await fetch(`/api/faxes/${id}/reprocess`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ provider: aiProvider }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to reprocess fax');
+      }
+
+      fetchFaxes();
+    } catch (err) {
+      console.error('Error reprocessing fax:', err);
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+
+    const files = e.dataTransfer.files;
+    if (files.length === 0) return;
+
+    const file = files[0];
+    if (file.type !== 'application/pdf') {
+      setUploadError('Please drop a PDF file');
+      setTimeout(() => setUploadError(null), 3000);
+      return;
+    }
+
+    setUploadingPdf(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('provider', aiProvider);
+
+      const response = await fetch('/api/faxes/upload-pdf', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload PDF');
+      }
+
+      setActiveTab('incoming');
+      fetchFaxes();
+      
+      if (data.faxId) {
+        router.push(`/dashboard/${data.faxId}`);
+      }
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed');
+      setTimeout(() => setUploadError(null), 5000);
+    } finally {
+      setUploadingPdf(false);
     }
   };
 
@@ -307,7 +430,51 @@ export default function Dashboard() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <main 
+        className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 relative"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {/* Drag Overlay */}
+        {isDragging && (
+          <div className="fixed inset-0 bg-blue-500/20 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-white rounded-2xl shadow-2xl p-12 text-center border-4 border-dashed border-blue-500">
+              <svg className="w-20 h-20 text-blue-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">Drop PDF to Process</h3>
+              <p className="text-gray-600">Release to upload and automatically process the fax</p>
+            </div>
+          </div>
+        )}
+
+        {/* Upload Progress Overlay */}
+        {uploadingPdf && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="bg-white rounded-2xl shadow-2xl p-12 text-center">
+              <svg className="animate-spin w-16 h-16 text-blue-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Processing PDF...</h3>
+              <p className="text-gray-600">Extracting text and creating fax record</p>
+            </div>
+          </div>
+        )}
+
+        {/* Upload Error Toast */}
+        {uploadError && (
+          <div className="fixed top-4 right-4 z-50 bg-red-100 border border-red-400 text-red-700 px-6 py-4 rounded-lg shadow-lg">
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{uploadError}</span>
+            </div>
+          </div>
+        )}
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
           {/* Header */}
           <div className="flex justify-between items-center mb-6">
@@ -550,6 +717,18 @@ export default function Dashboard() {
                       </div>
 
                       <div className="flex gap-2 ml-4">
+                        {fax.status === 'failed' && (
+                          <button
+                            onClick={(e) => handleRetry(fax.id, e)}
+                            className="px-3 py-2 bg-amber-500 text-white rounded-lg text-sm font-medium hover:bg-amber-600 transition-colors flex items-center gap-1"
+                            title="Retry processing"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Retry
+                          </button>
+                        )}
                         <Link
                           href={`/dashboard/${fax.id}`}
                           className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -564,6 +743,15 @@ export default function Dashboard() {
                             Mark Complete
                           </button>
                         )}
+                        <button
+                          onClick={(e) => handleDelete(fax.id, e)}
+                          className="px-3 py-2 bg-red-100 text-red-600 rounded-lg text-sm font-medium hover:bg-red-200 transition-colors flex items-center gap-1"
+                          title="Delete fax"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   </div>

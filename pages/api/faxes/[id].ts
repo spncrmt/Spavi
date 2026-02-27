@@ -136,5 +136,20 @@ export default async function handler(
     }
   }
 
+  if (req.method === 'DELETE') {
+    try {
+      await prisma.fax.delete({
+        where: { id: faxId },
+      });
+
+      return res.status(200).json({ fax: undefined });
+    } catch (error) {
+      console.error('Error deleting fax:', error);
+      return res.status(500).json({
+        error: error instanceof Error ? error.message : 'Failed to delete fax',
+      });
+    }
+  }
+
   return res.status(405).json({ error: 'Method not allowed' });
 }

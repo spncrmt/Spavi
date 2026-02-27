@@ -1,8 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import SectionCard from '@/components/SectionCard';
+
+type ViewMode = 'side-by-side' | 'sections-only';
+
+interface SelectedSection {
+  key: string;
+  title: string;
+  sources: string[];
+}
 
 interface FaxMetadata {
   patientName?: string;
@@ -156,6 +164,168 @@ function OriginalTextInline({ rawText }: { rawText: string }) {
   );
 }
 
+function HighlightedSourcePanel({ 
+  rawText, 
+  selectedSection, 
+  onClearSelection,
+  faxId 
+}: { 
+  rawText: string; 
+  selectedSection: SelectedSection | null;
+  onClearSelection: () => void;
+  faxId: number;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const firstHighlightRef = useRef<HTMLElement | null>(null);
+
+  const highlightedContent = useMemo(() => {
+    if (!selectedSection || !selectedSection.sources.length) {
+      return null;
+    }
+
+    interface Match {
+      start: number;
+      end: number;
+    }
+
+    const matches: Match[] = [];
+    const lowerText = rawText.toLowerCase();
+
+    for (const source of selectedSection.sources) {
+      if (!source || source.trim().length === 0) continue;
+      const lowerSource = source.toLowerCase().trim();
+      let startIndex = 0;
+
+      while (true) {
+        const index = lowerText.indexOf(lowerSource, startIndex);
+        if (index === -1) break;
+        matches.push({ start: index, end: index + source.trim().length });
+        startIndex = index + 1;
+      }
+    }
+
+    if (matches.length === 0) return null;
+
+    matches.sort((a, b) => a.start - b.start);
+
+    const merged: Match[] = [];
+    for (const match of matches) {
+      if (merged.length === 0) {
+        merged.push({ ...match });
+      } else {
+        const last = merged[merged.length - 1];
+        if (match.start <= last.end + 1) {
+          last.end = Math.max(last.end, match.end);
+        } else {
+          merged.push({ ...match });
+        }
+      }
+    }
+
+    const result: React.ReactNode[] = [];
+    let lastEnd = 0;
+    let isFirst = true;
+
+    for (let i = 0; i < merged.length; i++) {
+      const match = merged[i];
+      if (match.start > lastEnd) {
+        result.push(
+          <span key={`text-${i}`} className="text-gray-500">
+            {rawText.substring(lastEnd, match.start)}
+          </span>
+        );
+      }
+      result.push(
+        <mark 
+          key={`hl-${i}`} 
+          ref={isFirst ? (el) => { firstHighlightRef.current = el; } : undefined}
+          className="bg-yellow-300 text-gray-900 px-0.5 rounded font-medium"
+        >
+          {rawText.substring(match.start, match.end)}
+        </mark>
+      );
+      isFirst = false;
+      lastEnd = match.end;
+    }
+
+    if (lastEnd < rawText.length) {
+      result.push(
+        <span key="text-end" className="text-gray-500">
+          {rawText.substring(lastEnd)}
+        </span>
+      );
+    }
+
+    return result;
+  }, [rawText, selectedSection]);
+
+  useEffect(() => {
+    if (firstHighlightRef.current && scrollRef.current) {
+      const container = scrollRef.current;
+      const highlight = firstHighlightRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const highlightRect = highlight.getBoundingClientRect();
+      const scrollTop = highlightRect.top - containerRect.top + container.scrollTop - 80;
+      container.scrollTo({ top: Math.max(0, scrollTop), behavior: 'smooth' });
+    }
+  }, [selectedSection]);
+
+  const showingHighlights = selectedSection && highlightedContent;
+
+  return (
+    <div className="h-full flex flex-col bg-white rounded-lg overflow-hidden border border-gray-200">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-200">
+        {showingHighlights ? (
+          <>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+              <span className="text-sm font-medium text-gray-800">
+                Sources for: {selectedSection.title}
+              </span>
+              <span className="text-xs text-gray-400">
+                ({selectedSection.sources.length} source{selectedSection.sources.length !== 1 ? 's' : ''})
+              </span>
+            </div>
+            <button
+              onClick={onClearSelection}
+              className="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 bg-white border border-gray-200 rounded hover:bg-gray-100 transition-colors"
+            >
+              Clear
+            </button>
+          </>
+        ) : (
+          <>
+            <span className="text-sm font-medium text-gray-700">Original Document</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Click a section to highlight sources</span>
+              {faxId && (
+                <a
+                  href={`/api/faxes/${faxId}/pdf`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                  title="View PDF"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
+        <pre className="text-sm leading-relaxed whitespace-pre-wrap font-mono">
+          {showingHighlights ? highlightedContent : (
+            <span className="text-gray-700">{rawText}</span>
+          )}
+        </pre>
+      </div>
+    </div>
+  );
+}
+
 const sectionLabels: Record<string, string> = {
   // Common sections
   ChiefComplaint: 'Chief Complaint',
@@ -230,6 +400,8 @@ export default function FaxDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metadataCopied, setMetadataCopied] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('side-by-side');
+  const [selectedSection, setSelectedSection] = useState<SelectedSection | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -297,7 +469,7 @@ export default function FaxDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <main className="min-h-screen bg-blue-50 flex items-center justify-center">
         <div className="text-center">
           <svg
             className="animate-spin h-12 w-12 text-blue-500 mx-auto mb-4"
@@ -327,7 +499,7 @@ export default function FaxDetailPage() {
 
   if (error || !fax) {
     return (
-      <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <main className="min-h-screen bg-blue-50">
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
           <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded">
             <div className="flex">
@@ -361,10 +533,10 @@ export default function FaxDetailPage() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+      <main className="min-h-screen bg-blue-50">
         <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
           {/* Header */}
-          <div className="flex justify-between items-start mb-8">
+          <div className="flex justify-between items-start mb-6">
             <div>
               <Link
                 href="/dashboard"
@@ -390,6 +562,42 @@ export default function FaxDetailPage() {
                 </span>
               </div>
             </div>
+            
+            {/* View Mode Toggle - show if raw text available */}
+            {fax.rawText && fax.status === 'completed' && (
+              <div className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-1">
+                <button
+                  onClick={() => setViewMode('side-by-side')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    viewMode === 'side-by-side'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+                    </svg>
+                    Side by Side
+                  </span>
+                </button>
+                <button
+                  onClick={() => setViewMode('sections-only')}
+                  className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    viewMode === 'sections-only'
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Sections Only
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Processing Status */}
@@ -440,51 +648,53 @@ export default function FaxDetailPage() {
             </div>
           )}
 
-          {/* Fax Info */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8 overflow-hidden">
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Fax Information</h2>
-                {fax.pdfPath && (
-                  <a
-                    href={`/api/faxes/${fax.id}/pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center gap-2 text-sm"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    View Original PDF
-                  </a>
-                )}
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500">From Number: </span>
-                  <span className="font-medium">{fax.fromNumber}</span>
+          {/* Fax Info - hide in side-by-side mode since raw text is shown in left panel */}
+          {!(fax.rawText && viewMode === 'side-by-side' && fax.status === 'completed') && (
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8 overflow-hidden">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900">Fax Information</h2>
+                  {fax.pdfPath && (
+                    <a
+                      href={`/api/faxes/${fax.id}/pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center gap-2 text-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      View Original PDF
+                    </a>
+                  )}
                 </div>
-                <div>
-                  <span className="text-gray-500">Received: </span>
-                  <span className="font-medium">{new Date(fax.receivedAt).toLocaleString()}</span>
-                </div>
-                {fax.externalId && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-500">External ID: </span>
-                    <span className="font-medium">{fax.externalId}</span>
+                    <span className="text-gray-500">From Number: </span>
+                    <span className="font-medium">{fax.fromNumber}</span>
                   </div>
-                )}
+                  <div>
+                    <span className="text-gray-500">Received: </span>
+                    <span className="font-medium">{new Date(fax.receivedAt).toLocaleString()}</span>
+                  </div>
+                  {fax.externalId && (
+                    <div>
+                      <span className="text-gray-500">External ID: </span>
+                      <span className="font-medium">{fax.externalId}</span>
+                    </div>
+                  )}
+                </div>
               </div>
+              
+              {/* Original Document Text - Collapsible */}
+              {fax.rawText && (
+                <OriginalTextInline rawText={fax.rawText} />
+              )}
             </div>
-            
-            {/* Original Document Text - Collapsible */}
-            {fax.rawText && (
-              <OriginalTextInline rawText={fax.rawText} />
-            )}
-          </div>
+          )}
 
-          {/* Fax Metadata */}
-          {fax.metadata && Object.keys(fax.metadata).length > 0 && (
+          {/* Fax Metadata - hide in side-by-side mode */}
+          {fax.metadata && Object.keys(fax.metadata).length > 0 && !(fax.rawText && viewMode === 'side-by-side' && fax.status === 'completed') && (
             <div className="bg-white border border-gray-200 rounded-lg p-6 mb-8 shadow-sm">
               <div className="flex justify-between items-start mb-4">
                 <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
@@ -554,15 +764,95 @@ export default function FaxDetailPage() {
             </div>
           )}
 
-          {/* SmartSections */}
-          {fax.sections && Object.keys(fax.sections).length > 0 && (
+          {/* Side-by-Side View */}
+          {fax.rawText && viewMode === 'side-by-side' && fax.status === 'completed' && fax.sections && (
+            <div className="grid grid-cols-2 gap-6 mb-8">
+              {/* Source Text Viewer - Left Side (sticky so it stays visible while scrolling sections) */}
+              <div className="self-start sticky top-4" style={{ height: 'calc(100vh - 2rem)' }}>
+                <HighlightedSourcePanel
+                  rawText={fax.rawText}
+                  selectedSection={selectedSection}
+                  onClearSelection={() => setSelectedSection(null)}
+                  faxId={fax.id}
+                />
+              </div>
+              
+              {/* Sections - Right Side */}
+              <div>
+                {/* Patient Info Card */}
+                {fax.metadata && Object.keys(fax.metadata).length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 mb-4 shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                      <h3 className="text-sm font-semibold text-gray-800">Patient Information</h3>
+                      <button
+                        onClick={handleCopyMetadata}
+                        className={`px-2 py-1 text-xs rounded transition-colors ${
+                          metadataCopied
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {metadataCopied ? '✓ Copied' : '📋 Copy'}
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      {fax.metadata.patientName && (
+                        <div><span className="text-gray-500">Patient:</span> <span className="font-medium">{fax.metadata.patientName}</span></div>
+                      )}
+                      {fax.metadata.dateOfBirth && (
+                        <div><span className="text-gray-500">DOB:</span> <span className="font-medium">{fax.metadata.dateOfBirth}</span></div>
+                      )}
+                      {fax.metadata.mrn && (
+                        <div><span className="text-gray-500">MRN:</span> <span className="font-medium">{fax.metadata.mrn}</span></div>
+                      )}
+                      {fax.metadata.referringProvider && (
+                        <div><span className="text-gray-500">Provider:</span> <span className="font-medium">{fax.metadata.referringProvider}</span></div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* SmartSections */}
+                <div className="space-y-3">
+                  {Object.entries(fax.sections).map(([key, value]) => {
+                    if (key.endsWith('_sources')) return null;
+                    if (!value || value === 'Not documented') return null;
+                    const sources = fax.sections?.[`${key}_sources`] as string[] | undefined;
+                    const sectionTitle = sectionLabels[key] || key;
+                    return (
+                      <SectionCard
+                        key={key}
+                        title={sectionTitle}
+                        content={value}
+                        sources={sources}
+                        originalText={fax.rawText || undefined}
+                        isSelected={selectedSection?.key === key}
+                        onSelect={() => {
+                          if (selectedSection?.key === key) {
+                            setSelectedSection(null);
+                          } else {
+                            setSelectedSection({
+                              key,
+                              title: sectionTitle,
+                              sources: (sources as string[]) || [],
+                            });
+                          }
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Standard Sections View (no raw text or sections-only mode) */}
+          {fax.sections && Object.keys(fax.sections).length > 0 && (!fax.rawText || viewMode === 'sections-only' || fax.status !== 'completed') && (
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Epic SmartSections</h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {Object.entries(fax.sections).map(([key, value]) => {
-                  // Skip source arrays
                   if (key.endsWith('_sources')) return null;
-                  // Skip empty sections
                   if (!value || value === 'Not documented') return null;
 
                   const sources = fax.sections?.[`${key}_sources`] as string[] | undefined;
@@ -580,14 +870,6 @@ export default function FaxDetailPage() {
               </div>
             </div>
           )}
-
-
-          {/* Footer */}
-          <div className="text-center mt-12 text-gray-600 text-sm">
-            <Link href="/dashboard" className="text-blue-600 hover:text-blue-800 font-medium">
-              Back to Dashboard
-            </Link>
-          </div>
         </div>
       </main>
     </>

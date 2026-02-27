@@ -40,8 +40,10 @@ export default async function handler(
       return res.status(404).json({ error: 'No PDF available for this fax' });
     }
 
-    // Resolve the PDF path
-    const pdfFullPath = path.join(process.cwd(), fax.pdfPath);
+    // Resolve the PDF path (may be absolute or relative)
+    const pdfFullPath = path.isAbsolute(fax.pdfPath) 
+      ? fax.pdfPath 
+      : path.join(process.cwd(), fax.pdfPath);
 
     if (!fs.existsSync(pdfFullPath)) {
       return res.status(404).json({ error: 'PDF file not found on disk' });
