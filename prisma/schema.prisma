@@ -25,6 +25,7 @@ model Fax {
   sections        String?   // JSON string: generated SmartSections
   pdfPath         String?   // Path to stored PDF file
   errorMessage    String?   // Error message if processing failed
+  userId          String?   // Supabase auth user ID
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }

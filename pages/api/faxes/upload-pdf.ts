@@ -9,6 +9,7 @@ import { createCanvas } from 'canvas';
 import { classifyDocument, getDocumentTypeLabel } from '@/lib/documentClassifier';
 import { getSectionsForDocumentType } from '@/lib/prompt';
 import { deidentify, summarizeRedactions, reidentifySections, reidentifyMetadata } from '@/lib/deidentify';
+import { getUserFromRequest } from '@/lib/auth';
 
 export const config = {
   api: {
@@ -107,6 +108,11 @@ export default async function handler(
   }
 
   try {
+    const userId = await getUserFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
     const form = formidable({
       uploadDir: UPLOAD_DIR,
       keepExtensions: true,
@@ -150,6 +156,7 @@ export default async function handler(
         status: 'pending',
         rawText: pdfText,
         pdfPath: storedPath,
+        userId,
       },
     });
 

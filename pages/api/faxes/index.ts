@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
+import { getUserFromRequest } from '@/lib/auth';
 
 interface FaxListItem {
   id: number;
@@ -39,10 +40,14 @@ export default async function handler(
   }
 
   try {
+    const userId = await getUserFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
     const { status } = req.query;
 
-    // Build query
-    const where: any = {};
+    const where: any = { userId };
     if (status && typeof status === 'string') {
       where.status = status;
     }

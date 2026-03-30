@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/router';
 import ManualUploadModal from '@/components/ManualUploadModal';
 import ProviderToggle, { AIProvider } from '@/components/ProviderToggle';
+import { useAuth } from '@/lib/AuthContext';
+import { fetchWithAuth } from '@/lib/fetchWithAuth';
 
 interface FaxMetadata {
   patientName?: string;
@@ -186,6 +188,7 @@ function getPatientIdentifier(fax: FaxListItem): string | null {
 
 export default function Dashboard() {
   const router = useRouter();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [faxes, setFaxes] = useState<FaxListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -197,10 +200,24 @@ export default function Dashboard() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const dragCounter = useRef(0);
 
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.replace('/login');
+    }
+  }, [user, authLoading, router]);
+
+  if (authLoading || !user) {
+    return (
+      <main className="min-h-screen bg-blue-50 flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full" />
+      </main>
+    );
+  }
+
   const fetchFaxes = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/faxes');
+      const response = await fetchWithAuth('/api/faxes');
       const data = await response.json();
 
       if (!response.ok) {
@@ -250,7 +267,7 @@ export default function Dashboard() {
 
   const handleMarkReviewed = async (id: number) => {
     try {
-      const response = await fetch(`/api/faxes/${id}`, {
+      const response = await fetchWithAuth(`/api/faxes/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -277,7 +294,7 @@ export default function Dashboard() {
     }
 
     try {
-      const response = await fetch(`/api/faxes/${id}`, {
+      const response = await fetchWithAuth(`/api/faxes/${id}`, {
         method: 'DELETE',
       });
 
@@ -296,7 +313,7 @@ export default function Dashboard() {
     e.stopPropagation();
 
     try {
-      const response = await fetch(`/api/faxes/${id}/reprocess`, {
+      const response = await fetchWithAuth(`/api/faxes/${id}/reprocess`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -361,7 +378,7 @@ export default function Dashboard() {
       formData.append('file', file);
       formData.append('provider', aiProvider);
 
-      const response = await fetch('/api/faxes/upload-pdf', {
+      const response = await fetchWithAuth('/api/faxes/upload-pdf', {
         method: 'POST',
         body: formData,
       });
@@ -521,6 +538,15 @@ export default function Dashboard() {
                   />
                 </svg>
                 Refresh
+              </button>
+              <button
+                onClick={signOut}
+                className="px-4 py-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                Sign Out
               </button>
             </div>
           </div>

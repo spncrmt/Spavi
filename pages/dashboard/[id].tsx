@@ -3,6 +3,8 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import SectionCard from '@/components/SectionCard';
+import { useAuth } from '@/lib/AuthContext';
+import { fetchWithAuth } from '@/lib/fetchWithAuth';
 
 type ViewMode = 'side-by-side' | 'sections-only';
 
@@ -395,6 +397,7 @@ const sectionLabels: Record<string, string> = {
 export default function FaxDetailPage() {
   const router = useRouter();
   const { id } = router.query;
+  const { user, loading: authLoading } = useAuth();
 
   const [fax, setFax] = useState<FaxDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -404,12 +407,18 @@ export default function FaxDetailPage() {
   const [selectedSection, setSelectedSection] = useState<SelectedSection | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!authLoading && !user) {
+      router.replace('/login');
+    }
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (!id || !user) return;
 
     const fetchFax = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/faxes/${id}`);
+        const response = await fetchWithAuth(`/api/faxes/${id}`);
         const data = await response.json();
 
         if (!response.ok) {
@@ -427,11 +436,10 @@ export default function FaxDetailPage() {
 
     fetchFax();
 
-    // Poll for updates if pending or processing
     const interval = setInterval(async () => {
       if (fax?.status === 'pending' || fax?.status === 'processing') {
         try {
-          const response = await fetch(`/api/faxes/${id}`);
+          const response = await fetchWithAuth(`/api/faxes/${id}`);
           const data = await response.json();
           if (response.ok) {
             setFax(data.fax);
@@ -467,7 +475,7 @@ export default function FaxDetailPage() {
     }
   };
 
-  if (loading) {
+  if (authLoading || !user || loading) {
     return (
       <main className="min-h-screen bg-blue-50 flex items-center justify-center">
         <div className="text-center">

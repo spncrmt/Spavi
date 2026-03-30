@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { deidentify, summarizeRedactions, reidentifySections, reidentifyMetadata } from '@/lib/deidentify';
 import { classifyDocument, getDocumentTypeLabel } from '@/lib/documentClassifier';
 import { getSectionsForDocumentType } from '@/lib/prompt';
+import { getUserFromRequest } from '@/lib/auth';
 
 type AIProvider = 'claude' | 'openai' | 'ollama';
 
@@ -32,8 +33,13 @@ export default async function handler(
   }
 
   try {
-    const fax = await prisma.fax.findUnique({
-      where: { id: faxId },
+    const userId = await getUserFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const fax = await prisma.fax.findFirst({
+      where: { id: faxId, userId },
     });
 
     if (!fax) {

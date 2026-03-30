@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { fetchWithAuth } from '@/lib/fetchWithAuth';
 
 export type AIProvider = 'claude' | 'openai' | 'ollama';
 
@@ -42,7 +43,7 @@ export default function ManualUploadModal({ isOpen, onClose, onSuccess, provider
 
     try {
       // Create a fax record via webhook simulation
-      const response = await fetch('/api/faxes/manual', {
+      const response = await fetchWithAuth('/api/faxes/manual', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -86,7 +87,7 @@ export default function ManualUploadModal({ isOpen, onClose, onSuccess, provider
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/extract-pdf', {
+      const response = await fetchWithAuth('/api/extract-pdf', {
         method: 'POST',
         body: formData,
       });
@@ -127,7 +128,7 @@ export default function ManualUploadModal({ isOpen, onClose, onSuccess, provider
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await fetch('/api/extract-image', {
+      const response = await fetchWithAuth('/api/extract-image', {
         method: 'POST',
         body: formData,
       });

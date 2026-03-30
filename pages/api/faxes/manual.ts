@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { deidentify, summarizeRedactions, reidentifySections, reidentifyMetadata } from '@/lib/deidentify';
 import { classifyDocument, getDocumentTypeLabel, DocumentType } from '@/lib/documentClassifier';
 import { getSectionsForDocumentType } from '@/lib/prompt';
+import { getUserFromRequest } from '@/lib/auth';
 
 type AIProvider = 'claude' | 'openai' | 'ollama';
 
@@ -31,6 +32,11 @@ export default async function handler(
   }
 
   try {
+    const userId = await getUserFromRequest(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
     const { text, fromNumber, provider } = req.body as ManualFaxRequest;
 
     if (!text || text.trim().length === 0) {
@@ -40,7 +46,6 @@ export default async function handler(
       });
     }
 
-    // Create fax record with status "pending"
     const fax = await prisma.fax.create({
       data: {
         externalId: `manual-${Date.now()}`,
@@ -48,6 +53,7 @@ export default async function handler(
         receivedAt: new Date(),
         status: 'pending',
         rawText: text.trim(),
+        userId,
       },
     });
 
