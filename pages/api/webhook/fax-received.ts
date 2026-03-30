@@ -160,7 +160,8 @@ async function processFax(faxId: number, pdfPath: string) {
     console.log(`[Fax ${faxId}] De-identified: ${summarizeRedactions(redactions)}`);
 
     // Call generate API with DE-IDENTIFIED text and document-type-specific sections
-    const generateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/generate`, {
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000');
+    const generateResponse = await fetch(`${baseUrl}/api/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

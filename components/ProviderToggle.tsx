@@ -55,18 +55,28 @@ const STORAGE_KEY = 'spavi-ai-provider';
 
 export default function ProviderToggle({ onProviderChange, className = '' }: ProviderToggleProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<AIProvider>('claude');
+  const [selectedProvider, setSelectedProvider] = useState<AIProvider>('openai');
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
   const [checkingOllama, setCheckingOllama] = useState(false);
+  const [isLocalhost, setIsLocalhost] = useState(false);
+
+  useEffect(() => {
+    setIsLocalhost(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  }, []);
 
   // Load saved provider from localStorage
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as AIProvider | null;
-    if (saved && ['claude', 'openai', 'ollama'].includes(saved)) {
+    if (saved && ['claude', 'openai'].includes(saved)) {
       setSelectedProvider(saved);
       onProviderChange?.(saved);
+    } else if (saved === 'ollama' && isLocalhost) {
+      setSelectedProvider(saved);
+      onProviderChange?.(saved);
+    } else {
+      onProviderChange?.('openai');
     }
-  }, [onProviderChange]);
+  }, [onProviderChange, isLocalhost]);
 
   // Check Ollama status when dropdown opens or ollama is selected
   const checkOllamaStatus = useCallback(async () => {
@@ -140,7 +150,7 @@ export default function ProviderToggle({ onProviderChange, className = '' }: Pro
             </div>
 
             <div className="p-2">
-              {PROVIDERS.map((provider) => {
+              {PROVIDERS.filter(p => p.id !== 'ollama' || isLocalhost).map((provider) => {
                 const isSelected = selectedProvider === provider.id;
                 const isOllama = provider.id === 'ollama';
                 const ollamaUnavailable = isOllama && ollamaStatus && !ollamaStatus.available;
@@ -268,11 +278,11 @@ export default function ProviderToggle({ onProviderChange, className = '' }: Pro
 
 // Export hook for getting current provider
 export function useAIProvider(): [AIProvider, (provider: AIProvider) => void] {
-  const [provider, setProvider] = useState<AIProvider>('claude');
+  const [provider, setProvider] = useState<AIProvider>('openai');
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as AIProvider | null;
-    if (saved && ['claude', 'openai', 'ollama'].includes(saved)) {
+    if (saved && ['claude', 'openai'].includes(saved)) {
       setProvider(saved);
     }
   }, []);

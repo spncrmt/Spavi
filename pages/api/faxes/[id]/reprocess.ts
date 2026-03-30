@@ -98,7 +98,8 @@ async function processFax(faxId: number, text: string, provider?: AIProvider) {
       console.log(`[Reprocess Fax ${faxId}] Using local AI (Ollama) - skipping de-identification`);
     }
 
-    const generateResponse = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/generate`, {
+    const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : (process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000');
+    const generateResponse = await fetch(`${baseUrl}/api/generate`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
